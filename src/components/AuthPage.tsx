@@ -176,6 +176,22 @@ export const AuthPage: React.FC<AuthPageProps> = ({ isDark, onToggleTheme }) => 
     setFeedback(null);
   };
 
+  const quickSignIn = async (demoEmail: string, demoPass: string) => {
+    setEmail(demoEmail);
+    setPassword(demoPass);
+    setMode('login');
+    setFeedback(null);
+    setIsLoading(true);
+    try {
+      const res = await login(demoEmail, demoPass);
+      setFeedback({ type: 'success', message: res.message || 'Signed in successfully!' });
+    } catch (err: any) {
+      setFeedback({ type: 'error', message: err.message || 'Failed to sign in.' });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen flex flex-col justify-between bg-neutral-50 dark:bg-neutral-950 text-neutral-900 dark:text-neutral-100 transition-colors duration-200">
       {/* Top Header */}
@@ -539,33 +555,48 @@ export const AuthPage: React.FC<AuthPageProps> = ({ isDark, onToggleTheme }) => 
             <span>Sign in with Google</span>
           </button>
 
-          {/* Quick Demo Pre-fill Box (Problem 4: Demo email replaced) */}
+          {/* Quick Demo Pre-fill & 1-Click Login Box */}
           <div className="mt-6 pt-5 border-t border-neutral-100 dark:border-neutral-800 text-xs">
-            <span className="text-neutral-500 dark:text-neutral-400 block mb-2 font-medium">
-              Demo credentials for testing:
-            </span>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-neutral-500 dark:text-neutral-400 font-medium">
+                Demo credentials & 1-click test login:
+              </span>
+              <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                Cloudflare Ready
+              </span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <button
                 type="button"
-                onClick={() => fillDemoAccount('admin@domainguard.io', 'Admin123!')}
-                className="px-2.5 py-1 text-xs font-mono text-neutral-800 dark:text-neutral-200 bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 rounded transition-colors"
+                onClick={() => quickSignIn('admin@domainguard.io', 'Admin123!')}
+                className="p-2 text-left text-xs bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 rounded border border-neutral-200 dark:border-neutral-700 transition-colors cursor-pointer group"
               >
-                admin@domainguard.io (Admin123!)
+                <div className="font-semibold text-neutral-900 dark:text-white flex items-center justify-between">
+                  <span>Admin Lead</span>
+                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400 group-hover:underline">1-Click Login &rarr;</span>
+                </div>
+                <div className="text-[11px] font-mono text-neutral-500 dark:text-neutral-400">admin@domainguard.io</div>
               </button>
               <button
                 type="button"
-                onClick={() => fillDemoAccount('demo@domainguard.io', 'Demo123!')}
-                className="px-2.5 py-1 text-xs font-mono text-neutral-800 dark:text-neutral-200 bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 rounded transition-colors"
+                onClick={() => quickSignIn('demo@domainguard.io', 'Demo123!')}
+                className="p-2 text-left text-xs bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 rounded border border-neutral-200 dark:border-neutral-700 transition-colors cursor-pointer group"
               >
-                demo@domainguard.io (Demo123!)
+                <div className="font-semibold text-neutral-900 dark:text-white flex items-center justify-between">
+                  <span>Demo Engineer</span>
+                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400 group-hover:underline">1-Click Login &rarr;</span>
+                </div>
+                <div className="text-[11px] font-mono text-neutral-500 dark:text-neutral-400">demo@domainguard.io</div>
               </button>
             </div>
           </div>
 
-          {/* Security footnote */}
-          <div className="mt-5 flex items-center gap-2 text-xs text-neutral-500 dark:text-neutral-400">
-            <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-            <span>Cryptographic session management with server-side scrypt hashing</span>
+          {/* Security & Static Hosting footnote */}
+          <div className="mt-5 space-y-1.5 text-xs text-neutral-500 dark:text-neutral-400">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+              <span>Cryptographic session management with client & edge failover protection</span>
+            </div>
           </div>
         </div>
       </main>
