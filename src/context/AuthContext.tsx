@@ -4,159 +4,298 @@ import {
   getSupabaseConfig,
   saveSupabaseConfig,
   clearSupabaseConfig,
-  getStoredFallbackUser,
-  setStoredFallbackUser,
 } from '../lib/supabase';
 
-interface AuthUser {
+export interface AuthUser {
   id: string;
   email: string;
-  role?: string;
+  name: string;
+  role: string;
+  telegramChatId?: string | null;
+  telegramUsername?: string | null;
+  createdAt?: string;
 }
 
 interface AuthContextType {
   user: AuthUser | null;
+  token: string | null;
   loading: boolean;
   isLiveSupabase: boolean;
   supabaseUrl: string;
-  loginWithEmail: (email: string) => Promise<{ success: boolean; message: string }>;
+  login: (email: string, password: string) => Promise<{ success: boolean; message: string; user?: AuthUser }>;
+  register: (name: string, email: string, password: string) => Promise<{ success: boolean; message: string; user?: AuthUser }>;
+  loginWithGoogle: (email: string, name?: string) => Promise<{ success: boolean; message: string; user?: AuthUser }>;
+  forgotPassword: (email: string) => Promise<{ success: boolean; message: string; resetCode?: string; resetToken?: string }>;
+  resetPassword: (key: string, newPassword: string) => Promise<{ success: boolean; message: string }>;
   logout: () => Promise<void>;
+  updateUser: (updates: Partial<AuthUser>) => void;
   configureSupabase: (url: string, anonKey: string) => Promise<{ success: boolean; error?: string }>;
   resetSupabaseConfig: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const TOKEN_KEY = 'domainguard_auth_token';
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [token, setToken] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem(TOKEN_KEY);
+    }
+    return null;
+  });
   const [loading, setLoading] = useState(true);
   const [isLiveSupabase, setIsLiveSupabase] = useState(false);
   const [supabaseUrl, setSupabaseUrl] = useState('');
 
-  // Initialize auth state
+  // Initialize auth state from server
   useEffect(() => {
     let mounted = true;
 
-    async function initAuth() {
+    async function checkAuthSession() {
       const config = getSupabaseConfig();
       setSupabaseUrl(config.url);
-
-      const client = getSupabaseClient();
-      if (client && config.url && config.anonKey) {
+      if (config.url && config.anonKey) {
         setIsLiveSupabase(true);
-        try {
-          const { data: { session } } = await client.auth.getSession();
-          if (mounted) {
-            if (session?.user) {
-              setUser({
-                id: session.user.id,
-                email: session.user.email || '',
-                role: session.user.role || 'authenticated',
-              });
-            } else {
-              // Check fallback
-              const fallback = getStoredFallbackUser();
-              if (fallback) setUser(fallback);
-            }
-          }
+      }
 
-          // Listen to Supabase auth events
-          const { data: authListener } = client.auth.onAuthStateChange((_event, session) => {
-            if (!mounted) return;
-            if (session?.user) {
-              setUser({
-                id: session.user.id,
-                email: session.user.email || '',
-                role: session.user.role || 'authenticated',
-              });
-            } else {
-              const fallback = getStoredFallbackUser();
-              setUser(fallback);
-            }
+      const storedToken = localStorage.getItem(TOKEN_KEY);
+      if (storedToken) {
+        try {
+          const res = await fetch('/api/auth/me', {
+            headers: { Authorization: `Bearer ${storedToken}` },
           });
 
-          setLoading(false);
-          return () => {
-            authListener.subscription.unsubscribe();
-          };
-        } catch (err) {
-          console.warn('Supabase auth error:', err);
-          const fallback = getStoredFallbackUser();
-          if (mounted) {
-            setUser(fallback);
-            setLoading(false);
+          if (res.ok) {
+            const data = await res.json();
+            if (mounted && data.user) {
+              setUser(data.user);
+              setToken(storedToken);
+              setLoading(false);
+              return;
+            }
+          } else {
+            // Token expired or invalid
+            localStorage.removeItem(TOKEN_KEY);
+            if (mounted) {
+              setToken(null);
+              setUser(null);
+            }
           }
+        } catch (err) {
+          console.warn('Auth check error:', err);
         }
-      } else {
-        // No live Supabase credentials configured yet
-        setIsLiveSupabase(false);
-        const fallback = getStoredFallbackUser();
-        if (mounted) {
-          setUser(fallback);
-          setLoading(false);
+      }
+
+      // Check if Supabase session is available
+      const client = getSupabaseClient();
+      if (client && config.url && config.anonKey) {
+        try {
+          const { data: { session } } = await client.auth.getSession();
+          if (mounted && session?.user) {
+            setUser({
+              id: session.user.id,
+              email: session.user.email || '',
+              name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'User',
+              role: session.user.role || 'owner',
+            });
+          }
+        } catch (e) {
+          // ignore
         }
+      }
+
+      if (mounted) {
+        setLoading(false);
       }
     }
 
-    initAuth();
+    checkAuthSession();
 
     return () => {
       mounted = false;
     };
   }, []);
 
-  const loginWithEmail = async (email: string): Promise<{ success: boolean; message: string }> => {
+  const login = async (email: string, password: string): Promise<{ success: boolean; message: string; user?: AuthUser }> => {
     const cleanEmail = email.trim().toLowerCase();
-    const client = getSupabaseClient();
 
-    if (client && isLiveSupabase) {
-      try {
-        // Use Supabase Auth OTP / Magic Link
-        const { error } = await client.auth.signInWithOtp({
-          email: cleanEmail,
-          options: {
-            emailRedirectTo: window.location.origin,
-          },
-        });
+    // 1. Authenticate with backend API
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: cleanEmail, password }),
+    });
 
-        if (error) {
-          // If project has email rate limiting or requires confirmation, still provide authenticated session
-          const fallbackUser = { id: `sb_${Date.now()}`, email: cleanEmail };
-          setStoredFallbackUser(fallbackUser);
-          setUser(fallbackUser);
-          return {
-            success: true,
-            message: `Magic Link dispatched to ${cleanEmail}. Authenticated via Supabase session.`,
-          };
-        }
-
-        return {
-          success: true,
-          message: `Verification link sent to ${cleanEmail}. Please check your inbox or click to continue.`,
-        };
-      } catch (err: any) {
-        // Resilient fallback
-        const fallbackUser = { id: `usr_${Date.now()}`, email: cleanEmail };
-        setStoredFallbackUser(fallbackUser);
-        setUser(fallbackUser);
-        return {
-          success: true,
-          message: `Authenticated with ${cleanEmail}.`,
-        };
-      }
-    } else {
-      // Local authenticated session using secure token storage
-      const fallbackUser = { id: `usr_${Date.now()}`, email: cleanEmail };
-      setStoredFallbackUser(fallbackUser);
-      setUser(fallbackUser);
-      return {
-        success: true,
-        message: `Welcome, ${cleanEmail}. Session authenticated successfully.`,
-      };
+    let data: any = {};
+    try {
+      data = await res.json();
+    } catch {
+      data = { error: `Server error (${res.status})` };
     }
+
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to sign in.');
+    }
+
+    if (data.token && data.user) {
+      localStorage.setItem(TOKEN_KEY, data.token);
+      setToken(data.token);
+      setUser(data.user);
+    }
+
+    // Optional Supabase sync if credentials exist
+    const client = getSupabaseClient();
+    if (client && isLiveSupabase) {
+      client.auth.signInWithPassword({ email: cleanEmail, password }).catch(() => {});
+    }
+
+    return {
+      success: true,
+      message: data.message || 'Signed in successfully.',
+      user: data.user,
+    };
+  };
+
+  const register = async (
+    name: string,
+    email: string,
+    password: string
+  ): Promise<{ success: boolean; message: string; user?: AuthUser }> => {
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanName = name.trim();
+
+    const res = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: cleanName, email: cleanEmail, password }),
+    });
+
+    let data: any = {};
+    try {
+      data = await res.json();
+    } catch {
+      data = { error: `Server error (${res.status})` };
+    }
+
+    if (!res.ok) {
+      throw new Error(data.error || 'Registration failed.');
+    }
+
+    if (data.token && data.user) {
+      localStorage.setItem(TOKEN_KEY, data.token);
+      setToken(data.token);
+      setUser(data.user);
+    }
+
+    // Optional Supabase sync
+    const client = getSupabaseClient();
+    if (client && isLiveSupabase) {
+      client.auth.signUp({ email: cleanEmail, password, options: { data: { full_name: cleanName } } }).catch(() => {});
+    }
+
+    return {
+      success: true,
+      message: data.message || 'Account registered successfully.',
+      user: data.user,
+    };
+  };
+
+  const loginWithGoogle = async (
+    email: string,
+    name?: string
+  ): Promise<{ success: boolean; message: string; user?: AuthUser }> => {
+    const cleanEmail = email.trim().toLowerCase();
+    const res = await fetch('/api/auth/google-login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: cleanEmail, name: name || cleanEmail.split('@')[0] }),
+    });
+
+    let data: any = {};
+    try {
+      data = await res.json();
+    } catch {
+      data = { error: `Server error (${res.status})` };
+    }
+
+    if (!res.ok) {
+      throw new Error(data.error || 'Google sign-in failed.');
+    }
+
+    if (data.token && data.user) {
+      localStorage.setItem(TOKEN_KEY, data.token);
+      setToken(data.token);
+      setUser(data.user);
+    }
+
+    return {
+      success: true,
+      message: data.message || 'Signed in with Google successfully.',
+      user: data.user,
+    };
+  };
+
+  const forgotPassword = async (email: string) => {
+    const cleanEmail = email.trim().toLowerCase();
+    const res = await fetch('/api/auth/forgot-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: cleanEmail }),
+    });
+
+    let data: any = {};
+    try {
+      data = await res.json();
+    } catch {
+      data = { error: `Server error (${res.status})` };
+    }
+
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to generate reset request.');
+    }
+
+    return {
+      success: true,
+      message: data.message,
+      resetCode: data.resetCode,
+      resetToken: data.resetToken,
+    };
+  };
+
+  const resetPassword = async (key: string, newPassword: string) => {
+    const res = await fetch('/api/auth/reset-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resetCode: key, resetToken: key, newPassword }),
+    });
+
+    let data: any = {};
+    try {
+      data = await res.json();
+    } catch {
+      data = { error: `Server error (${res.status})` };
+    }
+
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to reset password.');
+    }
+
+    return {
+      success: true,
+      message: data.message,
+    };
   };
 
   const logout = async () => {
+    const currentToken = token || localStorage.getItem(TOKEN_KEY);
+    if (currentToken) {
+      fetch('/api/auth/logout', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${currentToken}` },
+      }).catch(() => {});
+    }
+
     const client = getSupabaseClient();
     if (client && isLiveSupabase) {
       try {
@@ -165,8 +304,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // ignore
       }
     }
-    setStoredFallbackUser(null);
+
+    localStorage.removeItem(TOKEN_KEY);
+    setToken(null);
     setUser(null);
+  };
+
+  const updateUser = (updates: Partial<AuthUser>) => {
+    setUser((prev) => (prev ? { ...prev, ...updates } : null));
   };
 
   const configureSupabase = async (url: string, anonKey: string): Promise<{ success: boolean; error?: string }> => {
@@ -194,11 +339,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     <AuthContext.Provider
       value={{
         user,
+        token,
         loading,
         isLiveSupabase,
         supabaseUrl,
-        loginWithEmail,
+        login,
+        register,
+        loginWithGoogle,
+        forgotPassword,
+        resetPassword,
         logout,
+        updateUser,
         configureSupabase,
         resetSupabaseConfig,
       }}

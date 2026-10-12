@@ -67,6 +67,9 @@ export interface AlertSettings {
   telegramEnabled: boolean;
   telegramBotToken: string;
   telegramChatId: string;
+  telegramConnected?: boolean;
+  telegramUsername?: string;
+  telegramBotUsername?: string;
   warn30DaysBefore: boolean;
   warn15DaysBefore: boolean;
   warn7DaysBefore: boolean;

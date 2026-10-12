@@ -3,6 +3,28 @@ import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dns from 'dns/promises';
+import {
+  initAuthStore,
+  registerUser,
+  loginUser,
+  loginOrCreateGoogleUser,
+  getUserByToken,
+  logoutSession,
+  createPasswordReset,
+  verifyAndResetPassword,
+  sanitizeUser,
+  getTelegramBotToken,
+  setTelegramBotToken,
+  getDefaultTelegramChatId,
+  getDefaultTelegramUsername,
+  setManualTelegramChatId,
+  createTelegramLinkRequest,
+  checkAndVerifyTelegramLink,
+  disconnectTelegramUser,
+  scanAndGetTelegramChats,
+  setActiveTelegramDestination,
+  UserRecord,
+} from './src/server/authStore.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -11,6 +33,35 @@ const app = express();
 const PORT = 3000;
 
 app.use(express.json());
+
+// Initialize persistent auth and settings
+initAuthStore();
+
+// Auth Middleware
+function requireAuth(req: any, res: any, next: any) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Authentication required. Please sign in.' });
+  }
+  const token = authHeader.split(' ')[1];
+  const user = getUserByToken(token);
+  if (!user) {
+    return res.status(401).json({ error: 'Session expired or invalid. Please sign in again.' });
+  }
+  req.user = user;
+  req.authToken = token;
+  next();
+}
+
+function optionalAuth(req: any, _res: any, next: any) {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.split(' ')[1];
+    req.user = getUserByToken(token) || null;
+    req.authToken = token;
+  }
+  next();
+}
 
 // Known registrar renewal/portal URLs mapping
 const REGISTRAR_URLS: Record<string, string> = {
@@ -240,15 +291,554 @@ app.get('/api/whois', async (req, res) => {
   }
 });
 
-// Telegram Bot Alert Test / Dispatch endpoint
+// ==========================================
+// Authentication Endpoints
+// ==========================================
+
+// Register a new user
+app.post('/api/auth/register', (req, res) => {
+  const { name, email, password } = req.body;
+  if (!name || !email || !password) {
+    return res.status(400).json({ error: 'Name, email, and password are required.' });
+  }
+
+  try {
+    const { user, token } = registerUser(name, email, password);
+    return res.status(201).json({
+      success: true,
+      message: 'Account registered successfully.',
+      token,
+      user: sanitizeUser(user),
+    });
+  } catch (err: any) {
+    const status = err.message.includes('already exists') ? 409 : 400;
+    return res.status(status).json({ error: err.message });
+  }
+});
+
+// Login with email and password
+app.post('/api/auth/login', (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password) {
+    return res.status(400).json({ error: 'Email and password are required.' });
+  }
+
+  try {
+    const { user, token } = loginUser(email, password);
+    return res.json({
+      success: true,
+      message: 'Signed in successfully.',
+      token,
+      user: sanitizeUser(user),
+    });
+  } catch (err: any) {
+    return res.status(401).json({ error: err.message });
+  }
+});
+
+// Get current authenticated user
+app.get('/api/auth/me', requireAuth, (req: any, res) => {
+  return res.json({
+    success: true,
+    user: sanitizeUser(req.user),
+  });
+});
+
+// Logout current session
+app.post('/api/auth/logout', (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.split(' ')[1];
+    logoutSession(token);
+  }
+  return res.json({ success: true, message: 'Logged out successfully.' });
+});
+
+// Request password reset token / code
+app.post('/api/auth/forgot-password', (req, res) => {
+  const { email } = req.body;
+  if (!email) {
+    return res.status(400).json({ error: 'Email address is required.' });
+  }
+
+  const result = createPasswordReset(email);
+  if (!result) {
+    return res.status(404).json({ error: 'No account registered with this email address.' });
+  }
+
+  return res.json({
+    success: true,
+    message: `Password reset verification code generated for ${email}.`,
+    resetCode: result.code,
+    resetToken: result.resetToken,
+  });
+});
+
+// Reset password using token or code
+app.post('/api/auth/reset-password', (req, res) => {
+  const { resetCode, resetToken, newPassword } = req.body;
+  const key = resetToken || resetCode;
+  if (!key || !newPassword) {
+    return res.status(400).json({ error: 'Reset verification code and new password are required.' });
+  }
+
+  try {
+    verifyAndResetPassword(key, newPassword);
+    return res.json({
+      success: true,
+      message: 'Password has been successfully updated. You can now sign in with your new password.',
+    });
+  } catch (err: any) {
+    return res.status(400).json({ error: err.message });
+  }
+});
+
+// Google Authentication Endpoint (Supports 1-click Google Sign-In and OAuth token verification)
+app.post('/api/auth/google-login', (req, res) => {
+  const { email, name } = req.body;
+  if (!email || !email.includes('@')) {
+    return res.status(400).json({ error: 'Valid Google account email is required.' });
+  }
+
+  try {
+    const { user, token } = loginOrCreateGoogleUser(email, name || email.split('@')[0]);
+    return res.json({
+      success: true,
+      message: `Signed in with Google as ${user.email}.`,
+      token,
+      user: sanitizeUser(user),
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'Google authentication failed.' });
+  }
+});
+
+// ==========================================
+// Modern Telegram Bot Integration Endpoints
+// ==========================================
+
+// Get Telegram Bot configuration status
+app.get('/api/telegram/bot-info', optionalAuth, async (req: any, res) => {
+  const botToken = getTelegramBotToken();
+  if (!botToken) {
+    return res.json({
+      configured: false,
+      botUsername: null,
+      message: 'Telegram Bot Token not configured on server.',
+    });
+  }
+
+  try {
+    const response = await fetch(`https://api.telegram.org/bot${botToken}/getMe`);
+    const data = await response.json();
+    if (!data.ok || !data.result) {
+      return res.json({
+        configured: false,
+        botUsername: null,
+        error: data.description || 'Invalid Telegram bot token',
+      });
+    }
+
+    const activeChatId = req.user?.telegramChatId || getDefaultTelegramChatId();
+    const activeChatTitle = req.user?.telegramUsername || getDefaultTelegramUsername();
+
+    return res.json({
+      configured: true,
+      botUsername: data.result.username,
+      botName: data.result.first_name,
+      activeChatId: activeChatId || null,
+      activeChatTitle: activeChatTitle || null,
+      isGroupChat: Boolean(activeChatId && activeChatId.startsWith('-')),
+    });
+  } catch (err: any) {
+    return res.status(500).json({ configured: false, error: err.message });
+  }
+});
+
+// Configure or update Telegram Bot Token on server
+app.post('/api/telegram/config-token', optionalAuth, async (req: any, res) => {
+  const { botToken } = req.body;
+  if (!botToken || typeof botToken !== 'string') {
+    return res.status(400).json({ error: 'botToken string is required.' });
+  }
+
+  try {
+    const response = await fetch(`https://api.telegram.org/bot${botToken.trim()}/getMe`);
+    const data = await response.json();
+    if (!data.ok || !data.result) {
+      return res.status(400).json({ error: `Telegram rejected token: ${data.description || 'Unknown error'}` });
+    }
+
+    setTelegramBotToken(botToken.trim());
+    return res.json({
+      success: true,
+      configured: true,
+      botUsername: data.result.username,
+      botName: data.result.first_name,
+      message: `Telegram Bot @${data.result.username} successfully linked to server.`,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'Failed to connect to Telegram API.' });
+  }
+});
+
+// Get all detected and remembered Telegram chats (Groups, Supergroups, DMs)
+app.get('/api/telegram/available-chats', optionalAuth, async (req: any, res) => {
+  const botToken = getTelegramBotToken();
+  const chats = await scanAndGetTelegramChats(botToken);
+  const activeChatId = req.user?.telegramChatId || getDefaultTelegramChatId();
+  const activeChatTitle = req.user?.telegramUsername || getDefaultTelegramUsername();
+
+  return res.json({
+    activeChatId,
+    activeChatTitle,
+    isGroupChat: Boolean(activeChatId && activeChatId.startsWith('-')),
+    chats: chats.map((c) => ({
+      ...c,
+      isActive: c.id === activeChatId,
+    })),
+  });
+});
+
+// Switch active destination to a selected chat (e.g. Group Chat vs Personal DM)
+app.post('/api/telegram/select-chat', optionalAuth, async (req: any, res) => {
+  const { chatId, title } = req.body;
+  if (!chatId || typeof chatId !== 'string' || !chatId.trim()) {
+    return res.status(400).json({ error: 'Valid chatId is required.' });
+  }
+
+  const userId = req.user?.id || req.body.userId;
+  const result = setActiveTelegramDestination(chatId.trim(), title, userId);
+
+  // Send announcement to Telegram chat
+  const botToken = getTelegramBotToken();
+  if (botToken) {
+    try {
+      const isGroup = chatId.trim().startsWith('-');
+      const destType = isGroup ? `Group chat (${result.title})` : `chat (${result.title})`;
+      await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: chatId.trim(),
+          parse_mode: 'HTML',
+          text: `🎉 <b>DomainGuard Notifications Active</b>\n\nThis Telegram ${destType} is now configured to receive automated domain expiration warnings and renewal alerts.`,
+        }),
+      });
+    } catch {
+      // ignore
+    }
+  }
+
+  return res.json({
+    success: true,
+    activeChatId: result.chatId,
+    activeChatTitle: result.title,
+    isGroupChat: result.chatId.startsWith('-'),
+    message: `Active notification destination switched to ${result.title}!`,
+  });
+});
+
+// Start Telegram connection flow for user (generates one-time code and deep links for private and group chats)
+app.post('/api/telegram/start-connect', optionalAuth, async (req: any, res) => {
+  const botToken = getTelegramBotToken();
+  if (!botToken) {
+    return res.status(400).json({
+      error: 'Telegram Bot Token is not configured yet. Please provide a Bot Token first.',
+    });
+  }
+
+  // Get bot username
+  let botUsername = '';
+  try {
+    const botRes = await fetch(`https://api.telegram.org/bot${botToken}/getMe`);
+    const botData = await botRes.json();
+    if (botData.ok && botData.result) {
+      botUsername = botData.result.username;
+    }
+  } catch (e) {
+    // ignore
+  }
+
+  const userId = req.user?.id || req.body.userId || 'guest_user';
+  const { code, token, deepLink, groupDeepLink } = createTelegramLinkRequest(userId, botUsername);
+
+  return res.json({
+    success: true,
+    botUsername,
+    verificationCode: code,
+    verificationToken: token,
+    deepLink,
+    groupDeepLink,
+    instructions: botUsername
+      ? `1. For personal DM: Open https://t.me/${botUsername}?start=${token}\n2. For group chat: Add bot via https://t.me/${botUsername}?startgroup=${token}\n3. Or send "${code}" in any chat with the bot.`
+      : `Send code "${code}" to your configured Telegram bot.`,
+  });
+});
+
+// Check verification status from Telegram getUpdates
+app.post('/api/telegram/verify-status', optionalAuth, async (req: any, res) => {
+  const botToken = getTelegramBotToken();
+  if (!botToken) {
+    return res.status(400).json({ error: 'Telegram Bot Token is not configured.' });
+  }
+
+  const userId = req.user?.id || req.body.userId || 'guest_user';
+  const result = await checkAndVerifyTelegramLink(userId, botToken);
+
+  if (result.connected) {
+    return res.json({
+      success: true,
+      connected: true,
+      telegramUsername: result.telegramUsername,
+      chatId: result.chatId,
+      isGroupChat: Boolean(result.chatId && result.chatId.startsWith('-')),
+      message: `Successfully connected Telegram destination ${result.telegramUsername}!`,
+    });
+  }
+
+  return res.json({
+    success: false,
+    connected: false,
+    error: result.error || 'Verification pending. Please send the start command or verification code to the bot in Telegram.',
+  });
+});
+
+// Disconnect Telegram from user
+app.post('/api/telegram/disconnect', optionalAuth, (req: any, res) => {
+  const userId = req.user?.id || req.body.userId;
+  if (userId) {
+    disconnectTelegramUser(userId);
+  }
+  return res.json({ success: true, message: 'Telegram account disconnected.' });
+});
+
+// Send test alert directly to connected Telegram account or group chat
+app.post('/api/telegram/send-test', optionalAuth, async (req: any, res) => {
+  const botToken = req.body.botToken || getTelegramBotToken();
+  if (!botToken) {
+    return res.status(400).json({ error: 'Telegram Bot Token is not configured.' });
+  }
+
+  // Priority: 1. Explicitly passed chatId, 2. Connected user's chat ID, 3. Default server chat ID
+  const targetChatId = req.body.chatId || req.user?.telegramChatId || getDefaultTelegramChatId();
+  if (!targetChatId) {
+    return res.status(400).json({
+      error: 'No connected Telegram account or group found. Please click "Connect Telegram" or select a group chat first.',
+    });
+  }
+
+  const isGroup = String(targetChatId).startsWith('-');
+  const recipientLabel =
+    req.body.recipientTitle ||
+    (req.body.chatId && req.body.chatId !== req.user?.telegramChatId
+      ? (isGroup ? `Group ${targetChatId}` : `Chat ${targetChatId}`)
+      : null) ||
+    req.user?.telegramUsername ||
+    getDefaultTelegramUsername() ||
+    (isGroup ? `Group Chat ${targetChatId}` : `Chat ${targetChatId}`);
+
+  const destinationNotice = isGroup
+    ? `Destination: <b>👥 Group Chat (${recipientLabel})</b>`
+    : `Destination: <b>👤 Personal Chat (${recipientLabel})</b>`;
+
+  const message =
+    req.body.message ||
+    `🔔 <b>DomainGuard Renewal Alert Test</b>\n\n` +
+      `Your Telegram alert channel is verified and operational!\n` +
+      `${destinationNotice}\n` +
+      `Triggered by: <b>${req.user?.email || 'Domain Administrator'}</b>\n\n` +
+      `Domain expiration warnings (30-day alerts and continuous 48-hour reminders) will be delivered here automatically.`;
+
+  try {
+    const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: targetChatId,
+        text: message,
+        parse_mode: 'HTML',
+      }),
+    });
+
+    const data = await response.json();
+    if (!data.ok) {
+      return res.status(400).json({
+        error: `Telegram error: ${data.description || 'Failed to dispatch message'}. ${isGroup ? 'Make sure the bot was added to this group and has permission to post.' : ''}`,
+      });
+    }
+
+    return res.json({
+      success: true,
+      messageId: data.result?.message_id,
+      recipient: recipientLabel,
+      isGroup,
+      chatId: targetChatId,
+      message: `Test alert successfully delivered to ${recipientLabel} on Telegram!`,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'Telegram connection error' });
+  }
+});
+
+// Connect Telegram Group or Chat ID manually (Advanced option for enterprise groups/channels)
+app.post('/api/telegram/manual-chat-id', optionalAuth, async (req: any, res) => {
+  const { chatId, username } = req.body;
+  if (!chatId || typeof chatId !== 'string' || !chatId.trim()) {
+    return res.status(400).json({ error: 'Valid Telegram Chat ID is required.' });
+  }
+
+  const cleanChatId = chatId.trim();
+  const botToken = getTelegramBotToken();
+
+  if (botToken) {
+    try {
+      const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: cleanChatId,
+          text: `🎉 <b>DomainGuard Alert Route Configured</b>\n\nThis Telegram destination is now connected to receive automated renewal warnings and reminders.`,
+          parse_mode: 'HTML',
+        }),
+      });
+      const data = await response.json();
+      if (!data.ok) {
+        return res.status(400).json({
+          error: `Telegram rejected Chat ID: ${data.description || 'Make sure the bot was added and has permission to post.'}`,
+        });
+      }
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message || 'Failed to reach Telegram API.' });
+    }
+  }
+
+  const userId = req.user?.id || req.body.userId;
+  setManualTelegramChatId(cleanChatId, username || `Chat ${cleanChatId}`, userId);
+
+  return res.json({
+    success: true,
+    connected: true,
+    chatId: cleanChatId,
+    telegramUsername: username || `Chat ${cleanChatId}`,
+    message: `Telegram Chat ID ${cleanChatId} successfully linked and verified!`,
+  });
+});
+
+// Automated Alert Dispatcher for Domain Expiration & Infrastructure Warnings
+app.post('/api/alerts/dispatch-automated', optionalAuth, async (req: any, res) => {
+  const { domains, force } = req.body;
+  const botToken = getTelegramBotToken();
+  const targetChatId = req.user?.telegramChatId || getDefaultTelegramChatId();
+  const targetTitle = req.user?.telegramUsername || getDefaultTelegramUsername() || 'Connected Telegram Destination';
+
+  if (!Array.isArray(domains) || domains.length === 0) {
+    return res.status(400).json({ error: 'A list of domains is required to evaluate alerts.' });
+  }
+
+  // Filter for domains requiring renewal alerts or infrastructure alerts
+  const expiringSoon = domains.filter(
+    (d: any) => d.daysUntilExpiration != null && d.daysUntilExpiration <= 30 && d.daysUntilExpiration > 0
+  );
+  const expired = domains.filter((d: any) => d.daysUntilExpiration != null && d.daysUntilExpiration <= 0);
+  const dnsDown = domains.filter((d: any) => d.isResolving === false);
+
+  const totalFlagged = expiringSoon.length + expired.length + dnsDown.length;
+
+  if (totalFlagged === 0 && !force) {
+    return res.json({
+      success: true,
+      alertDispatched: false,
+      message: 'All domains are healthy and outside warning thresholds. No alerts dispatched.',
+    });
+  }
+
+  const results: { telegram: boolean; telegramError?: string; recipient?: string } = {
+    telegram: false,
+  };
+
+  if (botToken && targetChatId) {
+    try {
+      const isGroup = targetChatId.toString().startsWith('-');
+      let text = `🚨 <b>DomainGuard Automated Expiration Alert</b>\n\n`;
+      text += `Automated scan detected <b>${totalFlagged} domain(s)</b> requiring renewal or attention:\n\n`;
+
+      if (expired.length > 0) {
+        text += `🔴 <b>EXPIRED DOMAINS (${expired.length}):</b>\n`;
+        expired.slice(0, 5).forEach((d: any) => {
+          text += `• <b>${d.domain}</b> (Expired: ${d.expirationDate || 'Past due'})\n`;
+        });
+        text += `\n`;
+      }
+
+      if (expiringSoon.length > 0) {
+        text += `⚠️ <b>EXPIRING SOON (&le;30 DAYS):</b>\n`;
+        expiringSoon.slice(0, 5).forEach((d: any) => {
+          text += `• <b>${d.domain}</b> — <b>${d.daysUntilExpiration} days remaining</b>\n`;
+          text += `   Registrar: ${d.registrar || 'ICANN RDAP'}\n`;
+          text += `   Expires: ${d.expirationDate || 'N/A'}\n`;
+        });
+        text += `\n`;
+      }
+
+      if (dnsDown.length > 0) {
+        text += `🌐 <b>DNS RESOLUTION OUTAGES (${dnsDown.length}):</b>\n`;
+        dnsDown.slice(0, 3).forEach((d: any) => {
+          text += `• <b>${d.domain}</b> — DNS resolution failed (0 A records)\n`;
+        });
+        text += `\n`;
+      }
+
+      text += `<i>Cadence: Mandatory continuous 48-hour reminders active</i>\n`;
+      text += `<i>Target: ${isGroup ? 'Group Chat (' + targetTitle + ')' : 'Personal Direct Chat'}</i>`;
+
+      const tgRes = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: targetChatId,
+          text,
+          parse_mode: 'HTML',
+        }),
+      });
+
+      const tgData = await tgRes.json();
+      if (tgData.ok) {
+        results.telegram = true;
+        results.recipient = targetTitle;
+      } else {
+        results.telegram = false;
+        results.telegramError = tgData.description;
+      }
+    } catch (err: any) {
+      results.telegram = false;
+      results.telegramError = err.message;
+    }
+  }
+
+  return res.json({
+    success: results.telegram,
+    alertDispatched: results.telegram,
+    totalFlagged,
+    results,
+    message: results.telegram
+      ? `Automated alert dispatched to ${results.recipient || 'Telegram'} for ${totalFlagged} domain(s).`
+      : 'No active Telegram channel configured or dispatch failed.',
+  });
+});
+
+// Legacy Telegram Bot test endpoint (kept for backward compatibility)
 app.post('/api/telegram/test', async (req, res) => {
-  const { botToken, chatId, message } = req.body;
+  const botToken = req.body.botToken || getTelegramBotToken();
+  const chatId = req.body.chatId;
   if (!botToken || !chatId) {
     return res.status(400).json({ error: 'botToken and chatId are required' });
   }
 
   try {
-    const text = message || `⚠️ <b>DomainGuard Renewal Alert</b>\n\nOne or more domains in your portfolio are approaching expiration.\nCheck your dashboard for immediate renewal.`;
+    const text =
+      req.body.message ||
+      `⚠️ <b>DomainGuard Renewal Alert</b>\n\nOne or more domains in your portfolio are approaching expiration.\nCheck your dashboard for immediate renewal.`;
     const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

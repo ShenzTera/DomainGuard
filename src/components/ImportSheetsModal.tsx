@@ -111,11 +111,11 @@ portal.customer-eu.de,Nordic Retail,Gandi,2027-02-14`;
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 max-w-xl w-full max-h-[90vh] overflow-y-auto rounded shadow-2xl p-6">
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+      <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 max-w-xl w-full max-h-[90vh] overflow-y-auto rounded shadow-2xl p-4 sm:p-6">
         <div className="flex items-center justify-between pb-4 border-b border-neutral-200 dark:border-neutral-800">
           <div className="flex items-center gap-2">
-            <FileSpreadsheet className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+            <FileSpreadsheet className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
             <div>
               <h3 className="text-base font-bold text-neutral-900 dark:text-white">
                 Import Domains from Google Sheets
@@ -125,7 +125,7 @@ portal.customer-eu.de,Nordic Retail,Gandi,2027-02-14`;
               </p>
             </div>
           </div>
-          <button onClick={onClose} className="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200">
+          <button onClick={onClose} className="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200 p-1">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -175,11 +175,11 @@ portal.customer-eu.de,Nordic Retail,Gandi,2027-02-14`;
               </p>
             </div>
 
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
               <button
                 type="button"
                 onClick={insertSampleData}
-                className="text-xs text-neutral-500 dark:text-neutral-400 hover:underline"
+                className="text-xs text-neutral-500 dark:text-neutral-400 hover:underline text-left cursor-pointer"
               >
                 Or test with sample data
               </button>
@@ -188,10 +188,10 @@ portal.customer-eu.de,Nordic Retail,Gandi,2027-02-14`;
                 type="button"
                 onClick={handleFetchSheet}
                 disabled={isFetching || !sheetUrl.trim()}
-                className="px-4 py-2 text-xs font-semibold bg-neutral-900 hover:bg-neutral-800 dark:bg-white dark:hover:bg-neutral-100 text-white dark:text-neutral-900 rounded flex items-center gap-1.5 disabled:opacity-50"
+                className="px-4 py-2 text-xs font-semibold bg-neutral-900 hover:bg-neutral-800 dark:bg-white dark:hover:bg-neutral-100 text-white dark:text-neutral-900 rounded flex items-center justify-center gap-1.5 disabled:opacity-50 cursor-pointer w-full sm:w-auto"
               >
                 {isFetching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                <span>Fetch & Parse Sheet</span>
+                <span>Fetch &amp; Parse Sheet</span>
               </button>
             </div>
           </div>
@@ -216,7 +216,7 @@ portal.customer-eu.de,Nordic Retail,Gandi,2027-02-14`;
               <button
                 type="button"
                 onClick={handleParseCsvText}
-                className="px-3.5 py-1.5 text-xs font-semibold bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-800 dark:text-neutral-200 rounded"
+                className="px-3.5 py-1.5 text-xs font-semibold bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-800 dark:text-neutral-200 rounded cursor-pointer"
               >
                 Parse Data
               </button>
@@ -244,8 +244,8 @@ portal.customer-eu.de,Nordic Retail,Gandi,2027-02-14`;
               </span>
             </div>
 
-            <div className="max-h-40 overflow-y-auto border border-neutral-200 dark:border-neutral-800 rounded text-xs font-mono">
-              <table className="w-full text-left">
+            <div className="max-h-40 overflow-y-auto overflow-x-auto touch-pan-x border border-neutral-200 dark:border-neutral-800 rounded text-xs font-mono">
+              <table className="w-full text-left min-w-[420px]">
                 <thead className="bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 sticky top-0">
                   <tr>
                     <th className="p-2">Domain</th>
@@ -267,18 +267,18 @@ portal.customer-eu.de,Nordic Retail,Gandi,2027-02-14`;
               </table>
             </div>
 
-            <div className="mt-4 flex items-center justify-end gap-2.5">
+            <div className="mt-4 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 sm:gap-2.5">
               <button
                 type="button"
                 onClick={onClose}
-                className="px-3.5 py-2 text-xs font-medium text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded transition-colors"
+                className="px-3.5 py-2 text-xs font-medium text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded transition-colors text-center cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={handleCommitImport}
-                className="px-4 py-2 text-xs font-semibold bg-neutral-900 hover:bg-neutral-800 dark:bg-white dark:hover:bg-neutral-100 text-white dark:text-neutral-900 rounded transition-colors"
+                className="px-4 py-2 text-xs font-semibold bg-neutral-900 hover:bg-neutral-800 dark:bg-white dark:hover:bg-neutral-100 text-white dark:text-neutral-900 rounded transition-colors text-center cursor-pointer"
               >
                 Import {parsedPreview.length} Domains to Portfolio
               </button>

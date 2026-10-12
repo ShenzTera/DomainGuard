@@ -27,6 +27,7 @@ import {
   saveTeam,
   recalculateDaysUntilExpiration,
   fetchDomainWhois,
+  dispatchAutomatedAlerts,
 } from './lib/domainService';
 
 function MainApplication() {
@@ -62,7 +63,7 @@ function MainApplication() {
     saveDomains(newDomains);
   }, []);
 
-  // Periodic automatic updates ticker
+  // Periodic automatic updates ticker & continuous alert scheduler
   useEffect(() => {
     const intervalMinutes = settings.autoRefreshIntervalMinutes || 5;
     const intervalMs = intervalMinutes * 60 * 1000;
@@ -71,6 +72,43 @@ function MainApplication() {
       setDomains((prev) => {
         const recalculated = recalculateDaysUntilExpiration(prev);
         saveDomains(recalculated);
+
+        // Continuous alert evaluation: check if critical domains exist
+        const criticalDomains = recalculated.filter(
+          (d) => (d.daysUntilExpiration != null && d.daysUntilExpiration <= 30) || !d.isResolving
+        );
+
+        if (criticalDomains.length > 0) {
+          const lastAlertTimestamp = Number(localStorage.getItem('domainguard_last_auto_alert') || '0');
+          const hoursSinceLastAlert = (Date.now() - lastAlertTimestamp) / (1000 * 60 * 60);
+
+          // If mandatory 48-hour continuous reminder is due (or initial check after 24h)
+          if (hoursSinceLastAlert >= 48) {
+            dispatchAutomatedAlerts(recalculated)
+              .then((res) => {
+                if (res.alertDispatched) {
+                  localStorage.setItem('domainguard_last_auto_alert', String(Date.now()));
+                  const autoLog: NotificationLog = {
+                    id: `log_${Date.now()}`,
+                    timestamp: new Date().toISOString(),
+                    domain: 'Automated 48-Hour Renewal Cadence',
+                    channel: 'telegram',
+                    recipient: res.results?.recipient || 'Telegram Channel',
+                    urgency: 'critical',
+                    message: `Continuous 48h reminder delivered: ${res.totalFlagged} expiring/down domain(s) flagged.`,
+                    status: 'sent',
+                  };
+                  setNotifications((curr) => {
+                    const next = [autoLog, ...curr];
+                    saveNotifications(next);
+                    return next;
+                  });
+                }
+              })
+              .catch((err) => console.warn('Background alert dispatch error:', err));
+          }
+        }
+
         return recalculated;
       });
       setLastUpdated(new Date());
@@ -113,23 +151,52 @@ function MainApplication() {
       updateDomains(updatedList);
       setLastUpdated(new Date());
 
-      // Log notification if any critical domains found
-      const criticalCount = updatedList.filter((d) => d.daysUntilExpiration <= 30).length;
-      if (criticalCount > 0) {
+      // Check for critical domains and dispatch automated alert update
+      const criticalDomains = updatedList.filter(
+        (d) => (d.daysUntilExpiration != null && d.daysUntilExpiration <= 30) || !d.isResolving
+      );
+
+      if (criticalDomains.length > 0) {
+        // Automatically dispatch live Telegram alert for batch refresh
+        try {
+          const autoRes = await dispatchAutomatedAlerts(updatedList);
+          if (autoRes.alertDispatched) {
+            localStorage.setItem('domainguard_last_auto_alert', String(Date.now()));
+            const tgLog: NotificationLog = {
+              id: `log_tg_${Date.now()}`,
+              timestamp: new Date().toISOString(),
+              domain: 'Portfolio Batch Scan',
+              channel: 'telegram',
+              recipient: autoRes.results?.recipient || 'Telegram Group',
+              urgency: 'warning',
+              message: `Live WHOIS scan alert dispatched: ${criticalDomains.length} expiring domains reported to Telegram.`,
+              status: 'sent',
+            };
+            const updatedLogs = [tgLog, ...notifications];
+            setNotifications(updatedLogs);
+            saveNotifications(updatedLogs);
+          }
+        } catch (err) {
+          console.warn('Telegram batch dispatch notification warning:', err);
+        }
+
+        // Email notification log
         const recipientsList = settings.alertEmails?.length ? settings.alertEmails.join(', ') : settings.alertEmail;
-        const newLog: NotificationLog = {
-          id: `log_${Date.now()}`,
+        const emailLog: NotificationLog = {
+          id: `log_em_${Date.now()}`,
           timestamp: new Date().toISOString(),
           domain: 'Portfolio Batch Scan',
           channel: 'email',
           recipient: recipientsList,
           urgency: 'warning',
-          message: `Periodic WHOIS update completed: ${criticalCount} domains expiring within 30 days.`,
+          message: `Periodic WHOIS update completed: ${criticalDomains.length} domains expiring within 30 days.`,
           status: 'sent',
         };
-        const updatedLogs = [newLog, ...notifications];
-        setNotifications(updatedLogs);
-        saveNotifications(updatedLogs);
+        setNotifications((curr) => {
+          const next = [emailLog, ...curr];
+          saveNotifications(next);
+          return next;
+        });
       }
     } finally {
       setIsRefreshing(false);
@@ -240,7 +307,7 @@ function MainApplication() {
       />
 
       {/* Main View Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 py-4 sm:py-6">
         {currentTab === 'dashboard' && (
           <DashboardView
             domains={domains}

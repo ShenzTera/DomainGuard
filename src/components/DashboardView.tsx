@@ -133,12 +133,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   return (
     <div className="space-y-5">
       {/* Top Action Bar & Refresh Status */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4">
         <div>
           <h1 className="text-xl font-bold tracking-tight text-neutral-950 dark:text-white">
             Monitored Domain Portfolio
           </h1>
-          <div className="flex items-center gap-2 text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
+          <div className="flex items-center gap-1.5 sm:gap-2 text-xs text-neutral-500 dark:text-neutral-400 mt-0.5 flex-wrap">
             <span>Priority Sorted: Near to Expiry</span>
             <span aria-hidden="true">·</span>
             <span>Last checked: {lastUpdated.toLocaleTimeString()}</span>
@@ -147,89 +147,89 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="grid grid-cols-2 sm:flex sm:items-center gap-2">
           <button
             onClick={onRefreshAll}
             disabled={isRefreshing}
-            className="px-3 py-1.5 text-xs font-medium border border-neutral-200 dark:border-neutral-800 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded flex items-center gap-1.5 transition-colors text-neutral-700 dark:text-neutral-300 disabled:opacity-50 cursor-pointer"
+            className="px-3 py-2 sm:py-1.5 text-xs font-medium border border-neutral-200 dark:border-neutral-800 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded flex items-center justify-center gap-1.5 transition-colors text-neutral-700 dark:text-neutral-300 disabled:opacity-50 cursor-pointer"
             title="Perform real-time WHOIS refresh on all domains"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
-            <span>{isRefreshing ? 'Checking...' : 'Refresh Status'}</span>
+            <RefreshCw className={`w-3.5 h-3.5 shrink-0 ${isRefreshing ? 'animate-spin' : ''}`} />
+            <span className="truncate">{isRefreshing ? 'Checking...' : 'Refresh Status'}</span>
           </button>
 
           <button
             onClick={onOpenImportModal}
-            className="px-3 py-1.5 text-xs font-medium border border-neutral-200 dark:border-neutral-800 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded flex items-center gap-1.5 transition-colors text-neutral-700 dark:text-neutral-300 cursor-pointer"
+            className="px-3 py-2 sm:py-1.5 text-xs font-medium border border-neutral-200 dark:border-neutral-800 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded flex items-center justify-center gap-1.5 transition-colors text-neutral-700 dark:text-neutral-300 cursor-pointer"
           >
-            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-            <span>Import Google Sheets</span>
+            <FileSpreadsheet className="w-3.5 h-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+            <span className="truncate">Import Sheets</span>
           </button>
 
           <button
             onClick={handleExportCsv}
-            className="px-3 py-1.5 text-xs font-medium border border-neutral-200 dark:border-neutral-800 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded flex items-center gap-1.5 transition-colors text-neutral-700 dark:text-neutral-300 cursor-pointer"
+            className="px-3 py-2 sm:py-1.5 text-xs font-medium border border-neutral-200 dark:border-neutral-800 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded flex items-center justify-center gap-1.5 transition-colors text-neutral-700 dark:text-neutral-300 cursor-pointer"
           >
-            <Download className="w-3.5 h-3.5" />
-            <span>Export CSV</span>
+            <Download className="w-3.5 h-3.5 shrink-0" />
+            <span className="truncate">Export CSV</span>
           </button>
 
           <button
             onClick={onOpenAddModal}
-            className="px-3.5 py-1.5 text-xs font-semibold bg-neutral-900 hover:bg-neutral-800 dark:bg-white dark:hover:bg-neutral-100 text-white dark:text-neutral-900 rounded flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
+            className="px-3.5 py-2 sm:py-1.5 text-xs font-semibold bg-neutral-900 hover:bg-neutral-800 dark:bg-white dark:hover:bg-neutral-100 text-white dark:text-neutral-900 rounded flex items-center justify-center gap-1.5 transition-colors shadow-xs cursor-pointer"
           >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Add Domain</span>
+            <Plus className="w-3.5 h-3.5 shrink-0" />
+            <span className="truncate">Add Domain</span>
           </button>
         </div>
       </div>
 
       {/* Summary Metric Ribbon (Anti-slop clean tabular display) */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="p-3.5 border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 rounded">
-          <div className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
+        <div className="p-3 sm:p-3.5 border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 rounded">
+          <div className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400 truncate">
             Total Monitored
           </div>
-          <div className="text-xl font-bold font-mono text-neutral-900 dark:text-white mt-1">
+          <div className="text-lg sm:text-xl font-bold font-mono text-neutral-900 dark:text-white mt-1">
             {stats.total}
           </div>
-          <div className="text-[11px] text-neutral-400 mt-0.5">Across all portfolios</div>
+          <div className="text-[11px] text-neutral-400 mt-0.5 truncate">Across all portfolios</div>
         </div>
 
-        <div className="p-3.5 border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 rounded">
-          <div className="text-[11px] font-medium text-amber-600 dark:text-amber-400">
+        <div className="p-3 sm:p-3.5 border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 rounded">
+          <div className="text-[11px] font-medium text-amber-600 dark:text-amber-400 truncate">
             Near to Expiry (&le;30 Days)
           </div>
-          <div className="text-xl font-bold font-mono text-amber-600 dark:text-amber-400 mt-1">
+          <div className="text-lg sm:text-xl font-bold font-mono text-amber-600 dark:text-amber-400 mt-1">
             {stats.warn30d}
           </div>
-          <div className="text-[11px] text-neutral-400 mt-0.5">Top priority renewal queue</div>
+          <div className="text-[11px] text-neutral-400 mt-0.5 truncate">Top priority queue</div>
         </div>
 
-        <div className="p-3.5 border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 rounded">
-          <div className="text-[11px] font-medium text-rose-600 dark:text-rose-400">
+        <div className="p-3 sm:p-3.5 border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 rounded">
+          <div className="text-[11px] font-medium text-rose-600 dark:text-rose-400 truncate">
             Critical / Expired
           </div>
-          <div className="text-xl font-bold font-mono text-rose-600 dark:text-rose-400 mt-1">
+          <div className="text-lg sm:text-xl font-bold font-mono text-rose-600 dark:text-rose-400 mt-1">
             {stats.expired + stats.critical7d}
           </div>
-          <div className="text-[11px] text-neutral-400 mt-0.5">{stats.expired} expired · {stats.critical7d} &le;7d</div>
+          <div className="text-[11px] text-neutral-400 mt-0.5 truncate">{stats.expired} exp · {stats.critical7d} &le;7d</div>
         </div>
 
-        <div className="p-3.5 border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 rounded">
-          <div className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+        <div className="p-3 sm:p-3.5 border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 rounded">
+          <div className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400 truncate">
             DNS Health & Resolution
           </div>
-          <div className="text-xl font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-1">
+          <div className="text-lg sm:text-xl font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-1">
             {stats.resolvingRate}%
           </div>
-          <div className="text-[11px] text-neutral-400 mt-0.5">Actively routing traffic</div>
+          <div className="text-[11px] text-neutral-400 mt-0.5 truncate">Actively routing traffic</div>
         </div>
       </div>
 
       {/* Priority Expiry Warning Banner (If critical domains exist) */}
       {(stats.warn30d > 0 || stats.expired > 0) && (
-        <div className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/60 rounded text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/60 rounded text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3">
           <div className="flex items-center gap-2 text-amber-800 dark:text-amber-300">
             <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400" />
             <span>
@@ -243,12 +243,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       )}
 
       {/* Controls: Portfolio Tabs & Search */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3 pt-1">
         {/* Functional Segmented Filter Tabs */}
-        <div className="flex items-center gap-1 p-1 bg-neutral-100 dark:bg-neutral-800/80 rounded overflow-x-auto text-xs font-medium">
+        <div className="flex items-center gap-1 p-1 bg-neutral-100 dark:bg-neutral-800/80 rounded overflow-x-auto no-scrollbar touch-pan-x text-xs font-medium -mx-1 sm:mx-0 px-1">
           <button
             onClick={() => setSelectedPortfolio('all')}
-            className={`px-3 py-1 rounded transition-colors whitespace-nowrap ${
+            className={`px-3 py-1.5 sm:py-1 rounded shrink-0 transition-colors whitespace-nowrap ${
               selectedPortfolio === 'all'
                 ? 'bg-white dark:bg-neutral-900 text-neutral-950 dark:text-white shadow-xs font-semibold'
                 : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
@@ -262,7 +262,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <button
                 key={tag}
                 onClick={() => setSelectedPortfolio(tag)}
-                className={`px-2.5 py-1 rounded transition-colors whitespace-nowrap ${
+                className={`px-2.5 py-1.5 sm:py-1 rounded shrink-0 transition-colors whitespace-nowrap ${
                   selectedPortfolio === tag
                     ? 'bg-white dark:bg-neutral-900 text-neutral-950 dark:text-white shadow-xs font-semibold'
                     : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
@@ -275,22 +275,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         {/* Search input */}
-        <div className="relative w-full sm:w-64">
+        <div className="relative w-full sm:w-64 md:w-72">
           <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
           <input
             type="text"
             placeholder="Search domain, registrar, company..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-8 pr-3 py-1.5 text-xs bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded text-neutral-900 dark:text-white placeholder:text-neutral-400 focus:outline-none focus:ring-1 focus:ring-neutral-900 dark:focus:ring-white"
+            className="w-full pl-8 pr-3 py-2 sm:py-1.5 text-xs bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded text-neutral-900 dark:text-white placeholder:text-neutral-400 focus:outline-none focus:ring-1 focus:ring-neutral-900 dark:focus:ring-white"
           />
         </div>
       </div>
 
       {/* High-Density Data Grid (Mandatory Columns: Domain / Company / Working Status / Registrar / Expiration Date / Renewal) */}
       <div className="border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 rounded shadow-xs overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+        <div className="overflow-x-auto touch-pan-x">
+          <table className="w-full text-left text-xs min-w-[800px]">
             <thead className="bg-neutral-50 dark:bg-neutral-950 text-neutral-500 dark:text-neutral-400 font-semibold border-b border-neutral-200 dark:border-neutral-800">
               <tr>
                 {/* Column 1: Domain */}
@@ -502,10 +502,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                           <button
                             type="button"
                             onClick={() => onToggleAlert2Days(domain.id)}
-                            className={`p-1 rounded transition-colors ${
+                            className={`p-1.5 rounded transition-colors cursor-pointer ${
                               domain.renewalAlerts.continuousReminderEvery2Days
-                                ? 'text-amber-600 dark:text-amber-400'
-                                : 'text-neutral-300 dark:text-neutral-600 hover:text-neutral-500'
+                                ? 'text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40'
+                                : 'text-neutral-400 dark:text-neutral-500 hover:text-neutral-600 dark:hover:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800'
                             }`}
                             title={
                               domain.renewalAlerts.continuousReminderEvery2Days
@@ -519,7 +519,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                           <button
                             type="button"
                             onClick={() => onDeleteDomain(domain.id)}
-                            className="p-1 text-neutral-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors"
+                            className="p-1.5 text-neutral-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded transition-colors cursor-pointer"
                             title="Remove from monitoring"
                           >
                             <Trash2 className="w-3.5 h-3.5" />

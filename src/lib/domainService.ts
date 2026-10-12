@@ -161,8 +161,8 @@ export const INITIAL_DOMAINS: DomainItem[] = [
 
 export const INITIAL_SETTINGS: AlertSettings = {
   emailAlertsEnabled: true,
-  alertEmail: 'shenz.terra@gmail.com',
-  alertEmails: ['shenz.terra@gmail.com', 'domains-admin@enterprise.internal'],
+  alertEmail: 'admin@domainguard.io',
+  alertEmails: ['admin@domainguard.io', 'domains-admin@enterprise.internal'],
   emailProvider: 'direct',
   telegramEnabled: false,
   telegramBotToken: '',
@@ -177,8 +177,8 @@ export const INITIAL_SETTINGS: AlertSettings = {
 export const INITIAL_TEAM: TeamMember[] = [
   {
     id: 'team_1',
-    email: 'shenz.terra@gmail.com',
-    name: 'Shenz (Primary Owner)',
+    email: 'admin@domainguard.io',
+    name: 'Admin Lead (Primary Owner)',
     role: 'owner',
     assignedPortfolios: ['Core Infrastructure', 'Brand & Trademarks', 'Marketing Campaigns', 'SaaS Apps', 'Regional'],
     receiveEmailAlerts: true,
@@ -396,6 +396,26 @@ export async function sendTelegramAlert(botToken: string, chatId: string, messag
   const data = await res.json();
   if (!res.ok || !data.success) {
     throw new Error(data.error || 'Telegram message failed');
+  }
+  return data;
+}
+
+// Dispatch automated domain expiration alerts to connected Telegram channel
+export async function dispatchAutomatedAlerts(domains: any[], force = false) {
+  const token = localStorage.getItem('domainguard_auth_token');
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  const res = await fetch('/api/alerts/dispatch-automated', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ domains, force }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error || 'Failed to dispatch automated alerts');
   }
   return data;
 }

@@ -12,20 +12,20 @@ export const WhoisDetailModal: React.FC<WhoisDetailModalProps> = ({ domain, onCl
   if (!domain) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
       <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 max-w-2xl w-full max-h-[90vh] overflow-y-auto rounded shadow-2xl flex flex-col">
         {/* Modal Header */}
-        <div className="px-6 py-4 border-b border-neutral-200 dark:border-neutral-800 flex items-center justify-between sticky top-0 bg-white dark:bg-neutral-900 z-10">
+        <div className="px-4 sm:px-6 py-3.5 sm:py-4 border-b border-neutral-200 dark:border-neutral-800 flex items-center justify-between sticky top-0 bg-white dark:bg-neutral-900 z-10">
           <div className="flex items-center gap-2.5">
-            <Globe className="w-5 h-5 text-neutral-700 dark:text-neutral-300" />
+            <Globe className="w-5 h-5 text-neutral-700 dark:text-neutral-300 shrink-0" />
             <div>
-              <h2 className="text-base font-bold text-neutral-900 dark:text-white font-mono">
+              <h2 className="text-base font-bold text-neutral-900 dark:text-white font-mono break-all">
                 {domain.domain}
               </h2>
               <div className="flex items-center gap-2 text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
-                <span>WHOIS & RDAP Record Details</span>
+                <span>WHOIS &amp; RDAP Record Details</span>
                 <span aria-hidden="true">·</span>
-                <span>{domain.whoisSource || 'ICANN RDAP Protocol'}</span>
+                <span className="truncate">{domain.whoisSource || 'ICANN RDAP Protocol'}</span>
               </div>
             </div>
           </div>
@@ -38,15 +38,15 @@ export const WhoisDetailModal: React.FC<WhoisDetailModalProps> = ({ domain, onCl
         </div>
 
         {/* Modal Body */}
-        <div className="p-6 space-y-6">
+        <div className="p-4 sm:p-6 space-y-5 sm:space-y-6">
           {/* Expiration & Renewal Card */}
-          <div className="p-4 rounded border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="p-3.5 sm:p-4 rounded border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
             <div>
               <div className="text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">
                 Expiration Status
               </div>
-              <div className="flex items-center gap-2 mt-1">
-                <span className="text-lg font-bold font-mono text-neutral-900 dark:text-white">
+              <div className="flex items-center gap-2 mt-1 flex-wrap">
+                <span className="text-base sm:text-lg font-bold font-mono text-neutral-900 dark:text-white">
                   {domain.expirationDate || 'Pending query'}
                 </span>
                 <span
@@ -74,7 +74,7 @@ export const WhoisDetailModal: React.FC<WhoisDetailModalProps> = ({ domain, onCl
               href={domain.registrarPortalUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-neutral-900 hover:bg-neutral-800 dark:bg-white dark:hover:bg-neutral-100 text-white dark:text-neutral-900 text-xs font-semibold rounded transition-colors whitespace-nowrap self-start sm:self-auto"
+              className="inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-neutral-900 hover:bg-neutral-800 dark:bg-white dark:hover:bg-neutral-100 text-white dark:text-neutral-900 text-xs font-semibold rounded transition-colors whitespace-nowrap self-stretch sm:self-auto"
             >
               <span>Renew via {domain.registrar.split(',')[0]}</span>
               <ExternalLink className="w-3.5 h-3.5" />
@@ -82,7 +82,7 @@ export const WhoisDetailModal: React.FC<WhoisDetailModalProps> = ({ domain, onCl
           </div>
 
           {/* Core Metadata Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-xs">
             <div className="p-3 border border-neutral-200 dark:border-neutral-800 rounded bg-white dark:bg-neutral-900">
               <div className="text-neutral-500 dark:text-neutral-400 mb-1 flex items-center gap-1.5 font-medium">
                 <Building className="w-3.5 h-3.5" />

@@ -87,7 +87,7 @@ export const WhoisLookupView: React.FC<WhoisLookupViewProps> = ({ onAddDomain, t
       </div>
 
       {/* Search Input Bar */}
-      <div className="border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-4 rounded shadow-xs">
+      <div className="border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-3.5 sm:p-4 rounded shadow-xs">
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -102,13 +102,13 @@ export const WhoisLookupView: React.FC<WhoisLookupViewProps> = ({ onAddDomain, t
               placeholder="Query domain (e.g. github.com, mynewidea2026.tech, vercel.app)..."
               value={queryInput}
               onChange={(e) => setQueryInput(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 text-sm font-mono bg-neutral-50 dark:bg-neutral-950 border border-neutral-300 dark:border-neutral-700 rounded text-neutral-900 dark:text-white placeholder:text-neutral-400 focus:outline-none focus:ring-1 focus:ring-neutral-900 dark:focus:ring-white"
+              className="w-full pl-10 pr-4 py-2.5 text-xs sm:text-sm font-mono bg-neutral-50 dark:bg-neutral-950 border border-neutral-300 dark:border-neutral-700 rounded text-neutral-900 dark:text-white placeholder:text-neutral-400 focus:outline-none focus:ring-1 focus:ring-neutral-900 dark:focus:ring-white"
             />
           </div>
           <button
             type="submit"
             disabled={isLoading || !queryInput.trim()}
-            className="px-5 py-2.5 bg-neutral-900 hover:bg-neutral-800 dark:bg-white dark:hover:bg-neutral-100 text-white dark:text-neutral-900 text-xs font-semibold rounded transition-colors flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
+            className="px-5 py-2.5 bg-neutral-900 hover:bg-neutral-800 dark:bg-white dark:hover:bg-neutral-100 text-white dark:text-neutral-900 text-xs font-semibold rounded transition-colors flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer w-full sm:w-auto"
           >
             {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Globe className="w-4 h-4" />}
             <span>Query WHOIS / RDAP</span>
@@ -116,7 +116,7 @@ export const WhoisLookupView: React.FC<WhoisLookupViewProps> = ({ onAddDomain, t
         </form>
 
         {/* Quick query presets */}
-        <div className="mt-3 flex items-center gap-2 text-xs text-neutral-500 dark:text-neutral-400 flex-wrap">
+        <div className="mt-3 flex items-center gap-1.5 sm:gap-2 text-xs text-neutral-500 dark:text-neutral-400 flex-wrap">
           <span className="text-[11px]">Quick inspect:</span>
           {['cloudflare.com', 'wikipedia.org', 'avail-brand-test-2026.org', 'github.com'].map((dom) => (
             <button
@@ -141,20 +141,20 @@ export const WhoisLookupView: React.FC<WhoisLookupViewProps> = ({ onAddDomain, t
 
       {/* Result Card */}
       {result && (
-        <div className="border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 rounded p-6 shadow-xs space-y-6">
+        <div className="border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 rounded p-4 sm:p-6 shadow-xs space-y-5 sm:space-y-6">
           {/* Header Status */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-neutral-200 dark:border-neutral-800">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 pb-4 sm:pb-5 border-b border-neutral-200 dark:border-neutral-800">
             <div>
-              <div className="flex items-center gap-2.5">
-                <h2 className="text-xl font-bold font-mono text-neutral-900 dark:text-white">
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <h2 className="text-lg sm:text-xl font-bold font-mono text-neutral-900 dark:text-white break-all">
                   {result.domain}
                 </h2>
                 {result.isAvailable ? (
-                  <span className="px-2.5 py-0.5 bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 rounded font-semibold text-xs flex items-center gap-1 font-mono">
+                  <span className="px-2.5 py-0.5 bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 rounded font-semibold text-xs flex items-center gap-1 font-mono shrink-0">
                     <CheckCircle2 className="w-3.5 h-3.5" /> AVAILABLE
                   </span>
                 ) : (
-                  <span className="px-2.5 py-0.5 bg-neutral-100 text-neutral-800 dark:bg-neutral-800 dark:text-neutral-200 rounded font-semibold text-xs flex items-center gap-1 font-mono">
+                  <span className="px-2.5 py-0.5 bg-neutral-100 text-neutral-800 dark:bg-neutral-800 dark:text-neutral-200 rounded font-semibold text-xs flex items-center gap-1 font-mono shrink-0">
                     <ShieldCheck className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" /> REGISTERED
                   </span>
                 )}
@@ -164,13 +164,13 @@ export const WhoisLookupView: React.FC<WhoisLookupViewProps> = ({ onAddDomain, t
               </p>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               {result.isAvailable ? (
                 <a
                   href={`https://www.namecheap.com/domains/registration/results/?domain=${encodeURIComponent(result.domain)}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded flex items-center gap-1.5 transition-colors"
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded flex items-center gap-1.5 transition-colors w-full sm:w-auto justify-center"
                 >
                   <span>Register Domain</span>
                   <ExternalLink className="w-3.5 h-3.5" />
@@ -181,7 +181,7 @@ export const WhoisLookupView: React.FC<WhoisLookupViewProps> = ({ onAddDomain, t
                     href={result.registrarPortalUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="px-3.5 py-2 border border-neutral-300 dark:border-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-800 dark:text-neutral-200 text-xs font-semibold rounded flex items-center gap-1.5 transition-colors"
+                    className="px-3.5 py-2 border border-neutral-300 dark:border-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-800 dark:text-neutral-200 text-xs font-semibold rounded flex items-center gap-1.5 transition-colors flex-1 sm:flex-initial justify-center"
                   >
                     <span>Renewal Portal</span>
                     <ExternalLink className="w-3.5 h-3.5" />
@@ -190,7 +190,7 @@ export const WhoisLookupView: React.FC<WhoisLookupViewProps> = ({ onAddDomain, t
                   <button
                     onClick={handleTrackResult}
                     disabled={isAlreadyTracked}
-                    className={`px-4 py-2 text-xs font-semibold rounded flex items-center gap-1.5 transition-colors ${
+                    className={`px-4 py-2 text-xs font-semibold rounded flex items-center gap-1.5 transition-colors flex-1 sm:flex-initial justify-center ${
                       isAlreadyTracked
                         ? 'bg-neutral-100 dark:bg-neutral-800 text-neutral-400 dark:text-neutral-500 cursor-default'
                         : 'bg-neutral-900 hover:bg-neutral-800 dark:bg-white dark:hover:bg-neutral-100 text-white dark:text-neutral-900'
@@ -206,11 +206,11 @@ export const WhoisLookupView: React.FC<WhoisLookupViewProps> = ({ onAddDomain, t
 
           {/* If Registered, Show Comprehensive Expiry & WHOIS Details */}
           {!result.isAvailable && (
-            <div className="space-y-6">
+            <div className="space-y-5 sm:space-y-6">
               {/* Expiration Timeline Banner */}
-              <div className="p-4 rounded border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="p-3.5 sm:p-4 rounded border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 rounded bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800">
+                  <div className="p-2 rounded bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 shrink-0">
                     <Calendar className="w-5 h-5 text-neutral-600 dark:text-neutral-300" />
                   </div>
                   <div>
@@ -223,7 +223,7 @@ export const WhoisLookupView: React.FC<WhoisLookupViewProps> = ({ onAddDomain, t
                   </div>
                 </div>
 
-                <div className="text-right">
+                <div className="text-left sm:text-right">
                   <span
                     className={`px-3 py-1 font-mono text-xs font-bold rounded inline-block ${
                       result.daysUntilExpiration <= 0
@@ -248,7 +248,7 @@ export const WhoisLookupView: React.FC<WhoisLookupViewProps> = ({ onAddDomain, t
               </div>
 
               {/* Data Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-xs">
                 <div className="p-3 border border-neutral-200 dark:border-neutral-800 rounded bg-white dark:bg-neutral-900">
                   <span className="text-neutral-400 dark:text-neutral-500 block mb-1">Registrar</span>
                   <span className="font-semibold text-sm text-neutral-900 dark:text-white">
