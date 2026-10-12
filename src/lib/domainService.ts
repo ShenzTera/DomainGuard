@@ -250,82 +250,112 @@ export const INITIAL_NOTIFICATIONS: NotificationLog[] = [
   },
 ];
 
-// Storage helpers
-export function loadDomains(): DomainItem[] {
+// Storage helpers with per-user data isolation
+function getUserKey(baseKey: string, userId?: string | null): string {
+  if (!userId) return baseKey;
+  const cleanId = userId.replace(/[^a-zA-Z0-9_-]/g, '_');
+  return `${baseKey}_${cleanId}`;
+}
+
+export function loadDomains(userId?: string | null): DomainItem[] {
   if (typeof window === 'undefined') return INITIAL_DOMAINS;
-  const raw = localStorage.getItem(STORAGE_KEY_DOMAINS);
+  const key = getUserKey(STORAGE_KEY_DOMAINS, userId);
+  const raw = localStorage.getItem(key);
   if (!raw) {
-    saveDomains(INITIAL_DOMAINS);
-    return INITIAL_DOMAINS;
+    // If it's a demo account or initial legacy store, initialize seeded portfolio
+    const isDemoOrAdmin = !userId || userId.includes('admin') || userId.includes('demo');
+    const initialList = isDemoOrAdmin ? INITIAL_DOMAINS : [];
+    saveDomains(initialList, userId);
+    return initialList;
   }
   try {
     const list: DomainItem[] = JSON.parse(raw);
     return recalculateDaysUntilExpiration(list);
   } catch {
-    return INITIAL_DOMAINS;
+    return [];
   }
 }
 
-export function saveDomains(domains: DomainItem[]): void {
+export function saveDomains(domains: DomainItem[], userId?: string | null): void {
   if (typeof window === 'undefined') return;
-  localStorage.setItem(STORAGE_KEY_DOMAINS, JSON.stringify(domains));
+  const key = getUserKey(STORAGE_KEY_DOMAINS, userId);
+  localStorage.setItem(key, JSON.stringify(domains));
 }
 
-export function loadSettings(): AlertSettings {
+export function loadSettings(userId?: string | null, userEmail?: string | null): AlertSettings {
   if (typeof window === 'undefined') return INITIAL_SETTINGS;
-  const raw = localStorage.getItem(STORAGE_KEY_SETTINGS);
-  if (!raw) return INITIAL_SETTINGS;
+  const key = getUserKey(STORAGE_KEY_SETTINGS, userId);
+  const raw = localStorage.getItem(key);
+  const defaultEmail = userEmail || INITIAL_SETTINGS.alertEmail;
+  const defaultSettings: AlertSettings = {
+    ...INITIAL_SETTINGS,
+    alertEmail: defaultEmail,
+    alertEmails: [defaultEmail],
+  };
+
+  if (!raw) return defaultSettings;
   try {
     const parsed = JSON.parse(raw);
     const alertEmails: string[] = Array.isArray(parsed.alertEmails) && parsed.alertEmails.length > 0
       ? parsed.alertEmails
-      : (parsed.alertEmail ? [parsed.alertEmail] : INITIAL_SETTINGS.alertEmails);
+      : (parsed.alertEmail ? [parsed.alertEmail] : [defaultEmail]);
     return {
-      ...INITIAL_SETTINGS,
+      ...defaultSettings,
       ...parsed,
       alertEmails,
-      alertEmail: alertEmails[0] || INITIAL_SETTINGS.alertEmail,
+      alertEmail: alertEmails[0] || defaultEmail,
     };
   } catch {
-    return INITIAL_SETTINGS;
+    return defaultSettings;
   }
 }
 
-export function saveSettings(settings: AlertSettings): void {
+export function saveSettings(settings: AlertSettings, userId?: string | null): void {
   if (typeof window === 'undefined') return;
-  localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(settings));
+  const key = getUserKey(STORAGE_KEY_SETTINGS, userId);
+  localStorage.setItem(key, JSON.stringify(settings));
 }
 
-export function loadNotifications(): NotificationLog[] {
+export function loadNotifications(userId?: string | null): NotificationLog[] {
   if (typeof window === 'undefined') return INITIAL_NOTIFICATIONS;
-  const raw = localStorage.getItem(STORAGE_KEY_NOTIFS);
-  if (!raw) return INITIAL_NOTIFICATIONS;
+  const key = getUserKey(STORAGE_KEY_NOTIFS, userId);
+  const raw = localStorage.getItem(key);
+  if (!raw) {
+    const isDemoOrAdmin = !userId || userId.includes('admin') || userId.includes('demo');
+    return isDemoOrAdmin ? INITIAL_NOTIFICATIONS : [];
+  }
   try {
     return JSON.parse(raw);
   } catch {
-    return INITIAL_NOTIFICATIONS;
+    return [];
   }
 }
 
-export function saveNotifications(logs: NotificationLog[]): void {
+export function saveNotifications(logs: NotificationLog[], userId?: string | null): void {
   if (typeof window === 'undefined') return;
-  localStorage.setItem(STORAGE_KEY_NOTIFS, JSON.stringify(logs));
+  const key = getUserKey(STORAGE_KEY_NOTIFS, userId);
+  localStorage.setItem(key, JSON.stringify(logs));
 }
 
-export function loadTeam(): TeamMember[] {
+export function loadTeam(userId?: string | null): TeamMember[] {
   if (typeof window === 'undefined') return INITIAL_TEAM;
-  const raw = localStorage.getItem(STORAGE_KEY_TEAM);
-  if (!raw) return INITIAL_TEAM;
+  const key = getUserKey(STORAGE_KEY_TEAM, userId);
+  const raw = localStorage.getItem(key);
+  if (!raw) {
+    const isDemoOrAdmin = !userId || userId.includes('admin') || userId.includes('demo');
+    return isDemoOrAdmin ? INITIAL_TEAM : [];
+  }
   try {
     return JSON.parse(raw);
   } catch {
-    return INITIAL_TEAM;
+    return [];
   }
 }
 
-export function saveTeam(team: TeamMember[]): void {
+export function saveTeam(team: TeamMember[], userId?: string | null): void {
   if (typeof window === 'undefined') return;
-  localStorage.setItem(STORAGE_KEY_TEAM, JSON.stringify(team));
+  const key = getUserKey(STORAGE_KEY_TEAM, userId);
+  localStorage.setItem(key, JSON.stringify(team));
 }
 
 // Recalculate days remaining dynamically based on current date

@@ -555,36 +555,36 @@ export const AuthPage: React.FC<AuthPageProps> = ({ isDark, onToggleTheme }) => 
             <span>Sign in with Google</span>
           </button>
 
-          {/* Quick Demo Pre-fill & 1-Click Login Box */}
+          {/* Pre-Fill Demo Test Credentials Box */}
           <div className="mt-6 pt-5 border-t border-neutral-100 dark:border-neutral-800 text-xs">
             <div className="flex items-center justify-between mb-2">
               <span className="text-neutral-500 dark:text-neutral-400 font-medium">
-                Demo credentials & 1-click test login:
+                Test Accounts (Click to Fill &amp; Authenticate):
               </span>
-              <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                Cloudflare Ready
+              <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 border border-neutral-200 dark:border-neutral-700">
+                Password Protected
               </span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <button
                 type="button"
-                onClick={() => quickSignIn('admin@domainguard.io', 'Admin123!')}
+                onClick={() => fillDemoAccount('admin@domainguard.io', 'Admin123!')}
                 className="p-2 text-left text-xs bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 rounded border border-neutral-200 dark:border-neutral-700 transition-colors cursor-pointer group"
               >
                 <div className="font-semibold text-neutral-900 dark:text-white flex items-center justify-between">
                   <span>Admin Lead</span>
-                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400 group-hover:underline">1-Click Login &rarr;</span>
+                  <span className="text-[10px] text-neutral-500 dark:text-neutral-400 group-hover:underline">Fill &rarr;</span>
                 </div>
                 <div className="text-[11px] font-mono text-neutral-500 dark:text-neutral-400">admin@domainguard.io</div>
               </button>
               <button
                 type="button"
-                onClick={() => quickSignIn('demo@domainguard.io', 'Demo123!')}
+                onClick={() => fillDemoAccount('demo@domainguard.io', 'Demo123!')}
                 className="p-2 text-left text-xs bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 rounded border border-neutral-200 dark:border-neutral-700 transition-colors cursor-pointer group"
               >
                 <div className="font-semibold text-neutral-900 dark:text-white flex items-center justify-between">
                   <span>Demo Engineer</span>
-                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400 group-hover:underline">1-Click Login &rarr;</span>
+                  <span className="text-[10px] text-neutral-500 dark:text-neutral-400 group-hover:underline">Fill &rarr;</span>
                 </div>
                 <div className="text-[11px] font-mono text-neutral-500 dark:text-neutral-400">demo@domainguard.io</div>
               </button>

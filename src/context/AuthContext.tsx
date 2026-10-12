@@ -29,25 +29,24 @@ interface AuthContextType {
   user: AuthUser | null;
   token: string | null;
   loading: boolean;
-  isLiveSupabase: boolean;
-  supabaseUrl: string;
   login: (email: string, password: string) => Promise<{ success: boolean; message: string; user?: AuthUser }>;
   register: (name: string, email: string, password: string) => Promise<{ success: boolean; message: string; user?: AuthUser }>;
   loginWithGoogle: (email: string, name?: string) => Promise<{ success: boolean; message: string; user?: AuthUser }>;
   forgotPassword: (email: string) => Promise<{ success: boolean; message: string; resetCode?: string; resetToken?: string }>;
-  resetPassword: (key: string, newPassword: string) => Promise<{ success: boolean; message: string }>;
+  resetPassword: (key: string, newPass: string) => Promise<{ success: boolean; message: string }>;
   logout: () => Promise<void>;
   updateUser: (updates: Partial<AuthUser>) => void;
-  configureSupabase: (url: string, anonKey: string) => Promise<{ success: boolean; error?: string }>;
-  resetSupabaseConfig: () => void;
+  isLiveSupabase: boolean;
+  supabaseUrl: string;
+  configureSupabase: (url: string, key: string) => Promise<{ success: boolean; error?: string }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
 const TOKEN_KEY = 'domainguard_auth_token';
 
-// Helper to determine if an HTTP response represents a static host fallback (e.g. Cloudflare Pages returning index.html)
 function isStaticHostFallback(res: Response, contentType: string): boolean {
-  if (res.status === 404 || res.status === 405) return true;
+  if (res.status === 404 || res.status === 405 || res.status === 502) return true;
   if (contentType.includes('text/html')) return true;
   return false;
 }
@@ -114,8 +113,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           // Server explicitly returned 401
           localStorage.removeItem(TOKEN_KEY);
           if (mounted) {
-            setToken(null);
             setUser(null);
+            setToken(null);
           }
         }
       }
@@ -153,6 +152,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = async (email: string, password: string): Promise<{ success: boolean; message: string; user?: AuthUser }> => {
     const cleanEmail = email.trim().toLowerCase();
 
+    if (!cleanEmail) {
+      throw new Error('Please enter your email address.');
+    }
+    if (!password) {
+      throw new Error('Please enter your password.');
+    }
+
     // 1. Try backend API first (works in Node.js server or Cloudflare Workers)
     try {
       const res = await fetch('/api/auth/login', {
@@ -167,7 +173,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (contentType.includes('application/json')) {
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
-          throw new Error(data.error || 'Failed to sign in.');
+          // Strictly surface authentication errors (e.g. Invalid password, user not found)
+          throw new Error(data.error || 'Failed to sign in. Please verify your credentials.');
         }
 
         if (data.token && data.user) {
@@ -189,30 +196,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
       }
 
-      // If response is HTML or 404, we are on static Cloudflare Pages without an active backend
+      // If response is HTML or 404, we are on static Cloudflare Pages without an active Express backend
       if (isStaticHostFallback(res, contentType)) {
-        console.info('[DomainGuard] Static hosting detected (Cloudflare Pages). Using resilient client auth store.');
+        console.info('[DomainGuard] Static hosting detected. Verifying credentials in client store.');
         const fallbackRes = clientLogin(cleanEmail, password);
         setToken(fallbackRes.token);
         setUser(fallbackRes.user);
         return fallbackRes;
       }
     } catch (err: any) {
-      // If error was a direct server 400 validation error (e.g., 'Invalid email or password.'), propagate it
-      if (err.message && !err.message.includes('fetch') && !err.message.includes('NetworkError')) {
-        // Fallback to client auth store if server isn't running or returned network error
-        if (err.message.toLowerCase().includes('failed to sign in')) {
-          // Try local store
-          const fallbackRes = clientLogin(cleanEmail, password);
-          setToken(fallbackRes.token);
-          setUser(fallbackRes.user);
-          return fallbackRes;
-        }
+      // If error is an explicit invalid credentials error from server (401/400), NEVER swallow it
+      if (
+        err.message &&
+        !err.message.includes('fetch') &&
+        !err.message.includes('NetworkError') &&
+        !err.message.includes('Failed to fetch')
+      ) {
         throw err;
       }
 
-      // Network unreachable / Cloudflare static edge fallback
-      console.info('[DomainGuard] Server unreachable. Activating Cloudflare client auth fallback.');
+      // Network unreachable / Cloudflare static edge fallback: strictly check client auth store
+      console.info('[DomainGuard] Server unreachable. Verifying credentials with client auth store.');
       const fallbackRes = clientLogin(cleanEmail, password);
       setToken(fallbackRes.token);
       setUser(fallbackRes.user);
@@ -233,6 +237,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   ): Promise<{ success: boolean; message: string; user?: AuthUser }> => {
     const cleanEmail = email.trim().toLowerCase();
     const cleanName = name.trim();
+
+    if (!cleanName) {
+      throw new Error('Full name is required.');
+    }
+    if (!cleanEmail || !cleanEmail.includes('@')) {
+      throw new Error('Valid email address is required.');
+    }
+    if (!password || password.length < 6) {
+      throw new Error('Password must be at least 6 characters long.');
+    }
 
     try {
       const res = await fetch('/api/auth/register', {
@@ -268,17 +282,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       if (isStaticHostFallback(res, contentType)) {
-        console.info('[DomainGuard] Static hosting detected. Registering in client-resilient store.');
+        console.info('[DomainGuard] Static hosting detected. Registering in client store.');
         const fallbackRes = clientRegister(cleanName, cleanEmail, password);
         setToken(fallbackRes.token);
         setUser(fallbackRes.user);
         return fallbackRes;
       }
     } catch (err: any) {
-      if (err.message && !err.message.includes('fetch') && !err.message.includes('NetworkError')) {
+      if (
+        err.message &&
+        !err.message.includes('fetch') &&
+        !err.message.includes('NetworkError') &&
+        !err.message.includes('Failed to fetch')
+      ) {
         throw err;
       }
-      console.info('[DomainGuard] Server unreachable. Registering in client-resilient store.');
+      console.info('[DomainGuard] Server unreachable. Registering in client store.');
       const fallbackRes = clientRegister(cleanName, cleanEmail, password);
       setToken(fallbackRes.token);
       setUser(fallbackRes.user);
@@ -438,25 +457,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   };
 
-  const configureSupabase = async (url: string, anonKey: string): Promise<{ success: boolean; error?: string }> => {
+  const configureSupabase = async (url: string, key: string) => {
     try {
-      saveSupabaseConfig(url.trim(), anonKey.trim());
-      setSupabaseUrl(url.trim());
+      saveSupabaseConfig(url, key);
+      setSupabaseUrl(url);
       setIsLiveSupabase(true);
-      const client = getSupabaseClient();
-      if (client) {
-        await client.auth.getSession();
-      }
       return { success: true };
     } catch (err: any) {
       return { success: false, error: err.message };
     }
-  };
-
-  const resetSupabaseConfig = () => {
-    clearSupabaseConfig();
-    setIsLiveSupabase(false);
-    setSupabaseUrl('');
   };
 
   return (
@@ -465,8 +474,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         user,
         token,
         loading,
-        isLiveSupabase,
-        supabaseUrl,
         login,
         register,
         loginWithGoogle,
@@ -474,8 +481,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         resetPassword,
         logout,
         updateUser,
+        isLiveSupabase,
+        supabaseUrl,
         configureSupabase,
-        resetSupabaseConfig,
       }}
     >
       {children}
@@ -483,10 +491,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 };
 
-export const useAuth = () => {
+export function useAuth() {
   const context = useContext(AuthContext);
   if (!context) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
-};
+}
