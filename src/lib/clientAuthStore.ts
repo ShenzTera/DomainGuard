@@ -204,56 +204,6 @@ export function clientRegister(
   };
 }
 
-/**
- * Google Sign-In: requires explicit email confirmation
- */
-export function clientGoogleLogin(
-  email: string,
-  name?: string
-): { success: boolean; token: string; user: AuthUser; message: string } {
-  const cleanEmail = (email || '').trim().toLowerCase();
-  const cleanName = name?.trim() || cleanEmail.split('@')[0];
-
-  if (!cleanEmail || !cleanEmail.includes('@')) {
-    throw new Error('Valid Google account email is required.');
-  }
-
-  const users = getLocalUsers();
-  let existing = users.find((u) => u.email.toLowerCase() === cleanEmail);
-  if (!existing) {
-    existing = {
-      id: `usr_g_${Date.now()}`,
-      email: cleanEmail,
-      name: cleanName,
-      role: 'owner',
-      passwordHash: hashClientPassword(`google_oauth_${cleanEmail}`),
-      createdAt: new Date().toISOString(),
-    };
-    users.push(existing);
-    saveLocalUsers(users);
-  }
-
-  const token = `token_google_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-  const authUser: AuthUser = {
-    id: existing.id,
-    email: existing.email,
-    name: existing.name,
-    role: existing.role,
-    telegramChatId: existing.telegramChatId,
-    telegramUsername: existing.telegramUsername,
-    createdAt: existing.createdAt,
-  };
-
-  localStorage.setItem(STORAGE_KEY_TOKEN, token);
-  localStorage.setItem(STORAGE_KEY_SESSION_USER, JSON.stringify(authUser));
-
-  return {
-    success: true,
-    token,
-    user: authUser,
-    message: 'Signed in with Google successfully.',
-  };
-}
 
 export function clientForgotPassword(email: string): { success: boolean; resetCode: string; message: string } {
   const cleanEmail = email.trim().toLowerCase();

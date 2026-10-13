@@ -2,13 +2,10 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import {
   getSupabaseClient,
   getSupabaseConfig,
-  saveSupabaseConfig,
-  clearSupabaseConfig,
 } from '../lib/supabase';
 import {
   clientLogin,
   clientRegister,
-  clientGoogleLogin,
   clientForgotPassword,
   clientResetPassword,
   clientGetSession,
@@ -31,14 +28,10 @@ interface AuthContextType {
   loading: boolean;
   login: (email: string, password: string) => Promise<{ success: boolean; message: string; user?: AuthUser }>;
   register: (name: string, email: string, password: string) => Promise<{ success: boolean; message: string; user?: AuthUser }>;
-  loginWithGoogle: (email: string, name?: string) => Promise<{ success: boolean; message: string; user?: AuthUser }>;
   forgotPassword: (email: string) => Promise<{ success: boolean; message: string; resetCode?: string; resetToken?: string }>;
   resetPassword: (key: string, newPass: string) => Promise<{ success: boolean; message: string }>;
   logout: () => Promise<void>;
   updateUser: (updates: Partial<AuthUser>) => void;
-  isLiveSupabase: boolean;
-  supabaseUrl: string;
-  configureSupabase: (url: string, key: string) => Promise<{ success: boolean; error?: string }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -60,22 +53,68 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return null;
   });
   const [loading, setLoading] = useState(true);
-  const [isLiveSupabase, setIsLiveSupabase] = useState(false);
-  const [supabaseUrl, setSupabaseUrl] = useState('');
 
-  // Initialize auth state from server or static fallback
+  // Initialize auth state: Check Supabase session first, then server/local session
   useEffect(() => {
     let mounted = true;
+    let authSubscription: { unsubscribe: () => void } | null = null;
 
-    async function checkAuthSession() {
+    async function initAuth() {
       const config = getSupabaseConfig();
-      setSupabaseUrl(config.url);
-      if (config.url && config.anonKey) {
-        setIsLiveSupabase(true);
+      const hasSupabaseCreds = Boolean(config.url && config.anonKey);
+      const client = getSupabaseClient();
+
+      // 1. If Supabase is configured via build env, listen to session
+      if (client && hasSupabaseCreds) {
+        try {
+          const { data: { session } } = await client.auth.getSession();
+          if (mounted && session?.user) {
+            const authUser: AuthUser = {
+              id: session.user.id,
+              email: session.user.email || '',
+              name:
+                session.user.user_metadata?.full_name ||
+                session.user.user_metadata?.name ||
+                session.user.email?.split('@')[0] ||
+                'User',
+              role: session.user.role || 'owner',
+              createdAt: session.user.created_at,
+            };
+            setUser(authUser);
+            setToken(session.access_token);
+            localStorage.setItem(TOKEN_KEY, session.access_token);
+            setLoading(false);
+          }
+
+          // Subscribe to Supabase auth changes
+          const { data: { subscription } } = client.auth.onAuthStateChange((_event, session) => {
+            if (!mounted) return;
+            if (session?.user) {
+              const authUser: AuthUser = {
+                id: session.user.id,
+                email: session.user.email || '',
+                name:
+                  session.user.user_metadata?.full_name ||
+                  session.user.user_metadata?.name ||
+                  session.user.email?.split('@')[0] ||
+                  'User',
+                role: session.user.role || 'owner',
+                createdAt: session.user.created_at,
+              };
+              setUser(authUser);
+              setToken(session.access_token);
+              localStorage.setItem(TOKEN_KEY, session.access_token);
+            }
+          });
+          authSubscription = subscription;
+        } catch (sbErr) {
+          console.warn('Supabase auth listener initialization:', sbErr);
+        }
       }
 
+      // 2. If no user resolved yet from Supabase, check stored token / backend
       const storedToken = localStorage.getItem(TOKEN_KEY);
-      if (storedToken) {
+      if (storedToken && mounted && !user) {
         let serverSessionChecked = false;
         try {
           const res = await fetch('/api/auth/me', {
@@ -93,7 +132,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
             serverSessionChecked = true;
           } else if (res.status === 401) {
-            // Server explicitly revoked session
             serverSessionChecked = true;
           }
         } catch {
@@ -101,39 +139,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
 
         // If backend was not reached or static host detected, check client-side local session
-        if (!serverSessionChecked) {
+        if (!serverSessionChecked && mounted) {
           const localUser = clientGetSession(storedToken);
-          if (localUser && mounted) {
+          if (localUser) {
             setUser(localUser);
             setToken(storedToken);
             setLoading(false);
             return;
           }
-        } else {
-          // Server explicitly returned 401
-          localStorage.removeItem(TOKEN_KEY);
-          if (mounted) {
-            setUser(null);
-            setToken(null);
-          }
-        }
-      }
-
-      // Check if Supabase session is available
-      const client = getSupabaseClient();
-      if (client && config.url && config.anonKey) {
-        try {
-          const { data: { session } } = await client.auth.getSession();
-          if (mounted && session?.user) {
-            setUser({
-              id: session.user.id,
-              email: session.user.email || '',
-              name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'User',
-              role: session.user.role || 'owner',
-            });
-          }
-        } catch {
-          // ignore
         }
       }
 
@@ -142,10 +155,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    checkAuthSession();
+    initAuth();
 
     return () => {
       mounted = false;
+      if (authSubscription) {
+        authSubscription.unsubscribe();
+      }
     };
   }, []);
 
@@ -159,7 +175,43 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw new Error('Please enter your password.');
     }
 
-    // 1. Try backend API first (works in Node.js server or Cloudflare Workers)
+    // 1. Direct Supabase Authentication if configured via env
+    const client = getSupabaseClient();
+    const config = getSupabaseConfig();
+    if (client && config.url && config.anonKey) {
+      const { data, error } = await client.auth.signInWithPassword({
+        email: cleanEmail,
+        password,
+      });
+
+      if (error) {
+        throw new Error(error.message || 'Invalid email or password.');
+      }
+
+      if (data.user && data.session) {
+        const authUser: AuthUser = {
+          id: data.user.id,
+          email: data.user.email || cleanEmail,
+          name:
+            data.user.user_metadata?.full_name ||
+            data.user.user_metadata?.name ||
+            cleanEmail.split('@')[0],
+          role: data.user.role || 'owner',
+          createdAt: data.user.created_at,
+        };
+        localStorage.setItem(TOKEN_KEY, data.session.access_token);
+        setToken(data.session.access_token);
+        setUser(authUser);
+
+        return {
+          success: true,
+          message: 'Signed in successfully.',
+          user: authUser,
+        };
+      }
+    }
+
+    // 2. Try Backend API (Cloudflare Pages Functions or Express Server)
     try {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
@@ -169,24 +221,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const contentType = res.headers.get('content-type') || '';
 
-      // If backend exists and responds with JSON
       if (contentType.includes('application/json')) {
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
-          // Strictly surface authentication errors (e.g. Invalid password, user not found)
-          throw new Error(data.error || 'Failed to sign in. Please verify your credentials.');
+          throw new Error(data.error || 'Failed to sign in. Please check your credentials.');
         }
 
         if (data.token && data.user) {
           localStorage.setItem(TOKEN_KEY, data.token);
           setToken(data.token);
           setUser(data.user);
-        }
-
-        // Optional Supabase sync if credentials exist
-        const client = getSupabaseClient();
-        if (client && isLiveSupabase) {
-          client.auth.signInWithPassword({ email: cleanEmail, password }).catch(() => {});
         }
 
         return {
@@ -196,16 +240,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
       }
 
-      // If response is HTML or 404, we are on static Cloudflare Pages without an active Express backend
       if (isStaticHostFallback(res, contentType)) {
-        console.info('[DomainGuard] Static hosting detected. Verifying credentials in client store.');
         const fallbackRes = clientLogin(cleanEmail, password);
         setToken(fallbackRes.token);
         setUser(fallbackRes.user);
         return fallbackRes;
       }
     } catch (err: any) {
-      // If error is an explicit invalid credentials error from server (401/400), NEVER swallow it
       if (
         err.message &&
         !err.message.includes('fetch') &&
@@ -215,15 +256,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         throw err;
       }
 
-      // Network unreachable / Cloudflare static edge fallback: strictly check client auth store
-      console.info('[DomainGuard] Server unreachable. Verifying credentials with client auth store.');
       const fallbackRes = clientLogin(cleanEmail, password);
       setToken(fallbackRes.token);
       setUser(fallbackRes.user);
       return fallbackRes;
     }
 
-    // Direct fallback
     const fallbackRes = clientLogin(cleanEmail, password);
     setToken(fallbackRes.token);
     setUser(fallbackRes.user);
@@ -248,6 +286,50 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw new Error('Password must be at least 6 characters long.');
     }
 
+    // 1. Direct Supabase Registration if configured via env
+    const client = getSupabaseClient();
+    const config = getSupabaseConfig();
+    if (client && config.url && config.anonKey) {
+      const { data, error } = await client.auth.signUp({
+        email: cleanEmail,
+        password,
+        options: {
+          data: {
+            full_name: cleanName,
+            name: cleanName,
+          },
+        },
+      });
+
+      if (error) {
+        throw new Error(error.message || 'Registration failed.');
+      }
+
+      if (data.user) {
+        const authUser: AuthUser = {
+          id: data.user.id,
+          email: data.user.email || cleanEmail,
+          name: cleanName,
+          role: 'owner',
+          createdAt: data.user.created_at,
+        };
+
+        const sessionToken = data.session?.access_token || `token_sb_${Date.now()}`;
+        localStorage.setItem(TOKEN_KEY, sessionToken);
+        setToken(sessionToken);
+        setUser(authUser);
+
+        return {
+          success: true,
+          message: data.session
+            ? 'Account registered and signed in successfully.'
+            : 'Account registered. Please check your email for confirmation if required.',
+          user: authUser,
+        };
+      }
+    }
+
+    // 2. Backend API Registration
     try {
       const res = await fetch('/api/auth/register', {
         method: 'POST',
@@ -268,12 +350,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setUser(data.user);
         }
 
-        // Optional Supabase sync
-        const client = getSupabaseClient();
-        if (client && isLiveSupabase) {
-          client.auth.signUp({ email: cleanEmail, password, options: { data: { full_name: cleanName } } }).catch(() => {});
-        }
-
         return {
           success: true,
           message: data.message || 'Account registered successfully.',
@@ -282,7 +358,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       if (isStaticHostFallback(res, contentType)) {
-        console.info('[DomainGuard] Static hosting detected. Registering in client store.');
         const fallbackRes = clientRegister(cleanName, cleanEmail, password);
         setToken(fallbackRes.token);
         setUser(fallbackRes.user);
@@ -297,7 +372,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ) {
         throw err;
       }
-      console.info('[DomainGuard] Server unreachable. Registering in client store.');
       const fallbackRes = clientRegister(cleanName, cleanEmail, password);
       setToken(fallbackRes.token);
       setUser(fallbackRes.user);
@@ -310,161 +384,149 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return fallbackRes;
   };
 
-  const loginWithGoogle = async (
-    email: string,
-    name?: string
-  ): Promise<{ success: boolean; message: string; user?: AuthUser }> => {
+  const forgotPassword = async (
+    email: string
+  ): Promise<{ success: boolean; message: string; resetCode?: string; resetToken?: string }> => {
     const cleanEmail = email.trim().toLowerCase();
-    try {
-      const res = await fetch('/api/auth/google-login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: cleanEmail, name: name || cleanEmail.split('@')[0] }),
-      });
-
-      const contentType = res.headers.get('content-type') || '';
-      if (contentType.includes('application/json')) {
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          throw new Error(data.error || 'Google sign-in failed.');
-        }
-
-        if (data.token && data.user) {
-          localStorage.setItem(TOKEN_KEY, data.token);
-          setToken(data.token);
-          setUser(data.user);
-        }
-
-        return {
-          success: true,
-          message: data.message || 'Signed in with Google successfully.',
-          user: data.user,
-        };
-      }
-
-      if (isStaticHostFallback(res, contentType)) {
-        const fallbackRes = clientGoogleLogin(cleanEmail, name);
-        setToken(fallbackRes.token);
-        setUser(fallbackRes.user);
-        return fallbackRes;
-      }
-    } catch {
-      // Static fallback
-      const fallbackRes = clientGoogleLogin(cleanEmail, name);
-      setToken(fallbackRes.token);
-      setUser(fallbackRes.user);
-      return fallbackRes;
+    if (!cleanEmail || !cleanEmail.includes('@')) {
+      throw new Error('A valid email address is required.');
     }
 
-    const fallbackRes = clientGoogleLogin(cleanEmail, name);
-    setToken(fallbackRes.token);
-    setUser(fallbackRes.user);
-    return fallbackRes;
-  };
+    const client = getSupabaseClient();
+    const config = getSupabaseConfig();
+    if (client && config.url && config.anonKey) {
+      const { error } = await client.auth.resetPasswordForEmail(cleanEmail, {
+        redirectTo: window.location.origin,
+      });
+      if (error) {
+        throw new Error(error.message);
+      }
+      return {
+        success: true,
+        message: `Password reset instructions sent to ${cleanEmail}.`,
+      };
+    }
 
-  const forgotPassword = async (email: string) => {
-    const cleanEmail = email.trim().toLowerCase();
     try {
       const res = await fetch('/api/auth/forgot-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: cleanEmail }),
       });
-
       const contentType = res.headers.get('content-type') || '';
       if (contentType.includes('application/json')) {
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
-          throw new Error(data.error || 'Failed to generate reset request.');
+          throw new Error(data.error || 'Failed to process password reset.');
         }
         return {
           success: true,
-          message: data.message,
+          message: data.message || `Password reset instructions sent to ${cleanEmail}.`,
           resetCode: data.resetCode,
           resetToken: data.resetToken,
         };
       }
-    } catch {
-      // Fallback
+    } catch (err: any) {
+      if (
+        err.message &&
+        !err.message.includes('fetch') &&
+        !err.message.includes('NetworkError') &&
+        !err.message.includes('Failed to fetch')
+      ) {
+        throw err;
+      }
     }
 
-    const fallbackRes = clientForgotPassword(cleanEmail);
-    return {
-      success: true,
-      message: fallbackRes.message,
-      resetCode: fallbackRes.resetCode,
-      resetToken: fallbackRes.resetCode,
-    };
+    return clientForgotPassword(cleanEmail);
   };
 
-  const resetPassword = async (key: string, newPassword: string) => {
+  const resetPassword = async (key: string, newPass: string): Promise<{ success: boolean; message: string }> => {
+    if (!key.trim()) {
+      throw new Error('Verification code or reset token is required.');
+    }
+    if (!newPass || newPass.length < 6) {
+      throw new Error('New password must be at least 6 characters long.');
+    }
+
+    const client = getSupabaseClient();
+    const config = getSupabaseConfig();
+    if (client && config.url && config.anonKey) {
+      const { error } = await client.auth.updateUser({ password: newPass });
+      if (error) {
+        throw new Error(error.message);
+      }
+      return {
+        success: true,
+        message: 'Your account password has been updated. You can now sign in.',
+      };
+    }
+
     try {
       const res = await fetch('/api/auth/reset-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ resetCode: key, resetToken: key, newPassword }),
+        body: JSON.stringify({ resetCode: key, resetToken: key, newPassword: newPass }),
       });
-
       const contentType = res.headers.get('content-type') || '';
       if (contentType.includes('application/json')) {
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
-          throw new Error(data.error || 'Failed to reset password.');
+          throw new Error(data.error || 'Failed to update password.');
         }
         return {
           success: true,
-          message: data.message,
+          message: data.message || 'Password updated successfully.',
         };
       }
-    } catch {
-      // Fallback
+    } catch (err: any) {
+      if (
+        err.message &&
+        !err.message.includes('fetch') &&
+        !err.message.includes('NetworkError') &&
+        !err.message.includes('Failed to fetch')
+      ) {
+        throw err;
+      }
     }
 
-    return clientResetPassword(key, newPassword);
+    return clientResetPassword(key, newPass);
   };
 
   const logout = async () => {
-    const currentToken = token || localStorage.getItem(TOKEN_KEY);
-    if (currentToken) {
-      fetch('/api/auth/logout', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${currentToken}` },
-      }).catch(() => {});
-    }
+    const activeToken = token || localStorage.getItem(TOKEN_KEY);
 
     const client = getSupabaseClient();
-    if (client && isLiveSupabase) {
+    if (client) {
       try {
         await client.auth.signOut();
+      } catch (err) {
+        console.warn('Supabase sign out note:', err);
+      }
+    }
+
+    if (activeToken) {
+      try {
+        await fetch('/api/auth/logout', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${activeToken}` },
+        });
       } catch {
         // ignore
       }
     }
 
     clientLogout();
-    setToken(null);
+    localStorage.removeItem(TOKEN_KEY);
     setUser(null);
+    setToken(null);
   };
 
   const updateUser = (updates: Partial<AuthUser>) => {
-    setUser((prev) => {
-      if (!prev) return null;
-      const updated = { ...prev, ...updates };
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('domainguard_session_user', JSON.stringify(updated));
-      }
-      return updated;
-    });
-  };
-
-  const configureSupabase = async (url: string, key: string) => {
-    try {
-      saveSupabaseConfig(url, key);
-      setSupabaseUrl(url);
-      setIsLiveSupabase(true);
-      return { success: true };
-    } catch (err: any) {
-      return { success: false, error: err.message };
+    if (!user) return;
+    const updated = { ...user, ...updates };
+    setUser(updated);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('domainguard_client_session_user', JSON.stringify(updated));
     }
   };
 
@@ -476,14 +538,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         loading,
         login,
         register,
-        loginWithGoogle,
         forgotPassword,
         resetPassword,
         logout,
         updateUser,
-        isLiveSupabase,
-        supabaseUrl,
-        configureSupabase,
       }}
     >
       {children}
@@ -491,10 +549,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 };
 
-export function useAuth() {
+export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
-}
+};
