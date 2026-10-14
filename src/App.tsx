@@ -48,20 +48,33 @@ function MainApplication() {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [selectedDomainForDetails, setSelectedDomainForDetails] = useState<DomainItem | null>(null);
 
-  // Load initial data
+  // Load initial data isolated to the authenticated user
   useEffect(() => {
-    const loadedDomains = loadDomains();
+    if (!user) return;
+    const loadedDomains = loadDomains(user.id);
     setDomains(loadedDomains);
-    setSettings(loadSettings());
-    setNotifications(loadNotifications());
-    setTeamMembers(loadTeam());
-  }, []);
+    setSettings(loadSettings(user.id, user.email));
+    setNotifications(loadNotifications(user.id));
+    setTeamMembers(loadTeam(user.id));
+
+    // Auto-sync real registry dates if any domain has outdated placeholder days
+    if (loadedDomains && loadedDomains.length > 0) {
+      const hasDefaulted = loadedDomains.some(
+        (d) => d.daysUntilExpiration === 90 || d.daysUntilExpiration === 84 || !d.expirationDate
+      );
+      if (hasDefaulted) {
+        setTimeout(() => {
+          handleRefreshAll();
+        }, 500);
+      }
+    }
+  }, [user?.id, user?.email]);
 
   // Sync domains to storage whenever modified
   const updateDomains = useCallback((newDomains: DomainItem[]) => {
     setDomains(newDomains);
-    saveDomains(newDomains);
-  }, []);
+    saveDomains(newDomains, user?.id);
+  }, [user?.id]);
 
   // Periodic automatic updates ticker & continuous alert scheduler
   useEffect(() => {
@@ -125,22 +138,33 @@ function MainApplication() {
         domains.map(async (item) => {
           try {
             const whois = await fetchDomainWhois(item.domain);
-            const daysUntilExpiration = whois.daysUntilExpiration ?? item.daysUntilExpiration;
-            let workingStatus = item.workingStatus;
+            let daysUntilExpiration = whois.daysUntilExpiration ?? item.daysUntilExpiration;
+            const expirationDate = whois.expirationDate ? whois.expirationDate.split('T')[0] : item.expirationDate;
 
-            if (daysUntilExpiration <= 0) workingStatus = 'expired';
-            else if (daysUntilExpiration <= 30) workingStatus = 'expiring_soon';
-            else if (whois.isResolving) workingStatus = 'active';
+            if (expirationDate) {
+              const expTime = new Date(expirationDate).getTime();
+              if (!isNaN(expTime)) {
+                daysUntilExpiration = Math.ceil((expTime - Date.now()) / (1000 * 60 * 60 * 24));
+              }
+            }
+
+            let workingStatus = item.workingStatus;
+            if (daysUntilExpiration != null) {
+              if (daysUntilExpiration <= 0) workingStatus = 'expired';
+              else if (daysUntilExpiration <= 30) workingStatus = 'expiring_soon';
+              else if (whois.isResolving) workingStatus = 'active';
+            }
 
             return {
               ...item,
               workingStatus,
               daysUntilExpiration,
               registrar: whois.registrar || item.registrar,
-              expirationDate: whois.expirationDate ? whois.expirationDate.split('T')[0] : item.expirationDate,
+              expirationDate,
               isResolving: whois.isResolving ?? item.isResolving,
               nameservers: whois.nameservers?.length ? whois.nameservers : item.nameservers,
               lastCheckedAt: new Date().toISOString(),
+              whoisSource: whois.whoisSource || item.whoisSource,
             };
           } catch {
             return item;
@@ -174,7 +198,7 @@ function MainApplication() {
             };
             const updatedLogs = [tgLog, ...notifications];
             setNotifications(updatedLogs);
-            saveNotifications(updatedLogs);
+            saveNotifications(updatedLogs, user?.id);
           }
         } catch (err) {
           console.warn('Telegram batch dispatch notification warning:', err);
@@ -194,7 +218,7 @@ function MainApplication() {
         };
         setNotifications((curr) => {
           const next = [emailLog, ...curr];
-          saveNotifications(next);
+          saveNotifications(next, user?.id);
           return next;
         });
       }
@@ -228,7 +252,7 @@ function MainApplication() {
     };
     const updatedLogs = [log, ...notifications];
     setNotifications(updatedLogs);
-    saveNotifications(updatedLogs);
+    saveNotifications(updatedLogs, user?.id);
   };
 
   const handleDeleteDomain = (id: string) => {
@@ -254,25 +278,25 @@ function MainApplication() {
 
   const handleSaveSettings = (newSettings: AlertSettings) => {
     setSettings(newSettings);
-    saveSettings(newSettings);
+    saveSettings(newSettings, user?.id);
   };
 
   const handleAddNotificationLog = (log: NotificationLog) => {
     const updated = [log, ...notifications];
     setNotifications(updated);
-    saveNotifications(updated);
+    saveNotifications(updated, user?.id);
   };
 
   const handleAddTeamMember = (member: TeamMember) => {
     const updated = [...teamMembers, member];
     setTeamMembers(updated);
-    saveTeam(updated);
+    saveTeam(updated, user?.id);
   };
 
   const handleRemoveTeamMember = (id: string) => {
     const updated = teamMembers.filter((m) => m.id !== id);
     setTeamMembers(updated);
-    saveTeam(updated);
+    saveTeam(updated, user?.id);
   };
 
   if (loading) {

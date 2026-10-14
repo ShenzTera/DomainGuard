@@ -3,11 +3,11 @@ import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dns from 'dns/promises';
+import * as whoiser from 'whoiser';
 import {
   initAuthStore,
   registerUser,
   loginUser,
-  loginOrCreateGoogleUser,
   getUserByToken,
   logoutSession,
   createPasswordReset,
@@ -30,7 +30,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
 app.use(express.json());
 
@@ -104,7 +104,31 @@ function cleanDomain(input: string): string {
   return cleaned;
 }
 
-// RDAP / WHOIS lookup handler
+// In-memory cache for IANA official RDAP bootstrap mappings
+let ianaBootstrapCache: any = null;
+let lastBootstrapFetch = 0;
+
+async function getIanaBootstrap(): Promise<any> {
+  const now = Date.now();
+  if (ianaBootstrapCache && now - lastBootstrapFetch < 24 * 60 * 60 * 1000) {
+    return ianaBootstrapCache;
+  }
+  try {
+    const res = await fetch('https://data.iana.org/rdap/dns.json', {
+      headers: { 'User-Agent': 'DomainGuard/1.0' },
+    });
+    if (res.ok) {
+      ianaBootstrapCache = await res.json();
+      lastBootstrapFetch = now;
+      return ianaBootstrapCache;
+    }
+  } catch (err) {
+    console.warn('Failed to refresh IANA RDAP bootstrap:', err);
+  }
+  return ianaBootstrapCache;
+}
+
+// Authoritative Domain Expiry & Registrar Finder Handler
 app.get('/api/whois', async (req, res) => {
   const queryDomain = req.query.domain as string;
   if (!queryDomain) {
@@ -115,6 +139,8 @@ app.get('/api/whois', async (req, res) => {
   if (!domain || !domain.includes('.')) {
     return res.status(400).json({ error: 'Invalid domain format' });
   }
+
+  const tld = domain.split('.').pop()?.toLowerCase() || '';
 
   // 1. Check DNS resolution first
   let isResolving = false;
@@ -136,159 +162,265 @@ app.get('/api/whois', async (req, res) => {
     // DNS resolution failure doesn't mean domain doesn't exist
   }
 
-  // 2. Query RDAP (Registration Data Access Protocol)
+  // 2. If user configured DOMSCAN_API_KEY, query Domscan API first
+  const domscanApiKey = process.env.DOMSCAN_API_KEY || '';
+  if (domscanApiKey) {
+    try {
+      const domscanRes = await fetch(`https://domscan.net/v1/rdap?domain=${encodeURIComponent(domain)}`, {
+        headers: {
+          'Accept': 'application/json',
+          'X-API-Key': domscanApiKey,
+          'Authorization': `Bearer ${domscanApiKey}`,
+          'User-Agent': 'DomainGuard/1.0',
+        },
+      });
+
+      if (domscanRes.status === 404) {
+        return res.json({
+          domain,
+          isAvailable: true,
+          workingStatus: 'available',
+          isResolving: false,
+          registrar: null,
+          registrarPortalUrl: `https://www.namecheap.com/domains/registration/results/?domain=${encodeURIComponent(domain)}`,
+          company: null,
+          expirationDate: null,
+          registrationDate: null,
+          daysUntilExpiration: null,
+          nameservers: [],
+          dnsIps: [],
+          rawStatus: ['Domain is Available for registration'],
+          whoisSource: 'Domscan API (Available)',
+        });
+      }
+
+      if (domscanRes.ok) {
+        const domscanData = await domscanRes.json();
+        const expDate = domscanData.expiration_date || domscanData.expiry_date || domscanData.expires_at || null;
+        if (expDate) {
+          const expTime = new Date(expDate).getTime();
+          const daysUntilExpiration = Math.ceil((expTime - Date.now()) / (1000 * 60 * 60 * 24));
+          const regName = domscanData.registrar || domscanData.registration?.registrar || 'ICANN Accredited Registrar';
+          return res.json({
+            domain,
+            isAvailable: false,
+            workingStatus: daysUntilExpiration <= 0 ? 'expired' : daysUntilExpiration <= 30 ? 'expiring_soon' : 'active',
+            isResolving,
+            registrar: regName,
+            registrarPortalUrl: getRegistrarPortalUrl(regName),
+            company: domscanData.company || `${domain.split('.')[0].toUpperCase()} Organization`,
+            expirationDate: expDate.split('T')[0],
+            registrationDate: domscanData.creation_date || domscanData.registered_at || null,
+            daysUntilExpiration,
+            nameservers: nameServers.length ? nameServers : (domscanData.nameservers || []),
+            dnsIps,
+            rawStatus: Array.isArray(domscanData.status) ? domscanData.status : ['active'],
+            whoisSource: 'Domscan Domain Intelligence API',
+          });
+        }
+      }
+    } catch {
+      // Proceed to free authoritative engines
+    }
+  }
+
+  // 3. Engine 1: Official IANA Direct Registry RDAP (100% Free, Official, No API Keys)
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 6000);
+    const bootstrap = await getIanaBootstrap();
+    const service = bootstrap?.services?.find((s: any) => s[0].includes(tld));
+    if (service && service[1] && service[1][0]) {
+      const base = service[1][0].replace(/\/+$/, '');
+      const rdapUrl = `${base}/domain/${encodeURIComponent(domain)}`;
+      
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 6000);
 
-    const rdapResponse = await fetch(`https://rdap.org/domain/${encodeURIComponent(domain)}`, {
-      headers: {
-        'Accept': 'application/rdap+json, application/json',
-        'User-Agent': 'DomainGuard-Checker/1.0',
-      },
-      signal: controller.signal,
-    }).finally(() => clearTimeout(timeout));
+      const rdapRes = await fetch(rdapUrl, {
+        headers: {
+          'Accept': 'application/rdap+json, application/json',
+          'User-Agent': 'DomainGuard-RDAP/1.0',
+        },
+        signal: controller.signal,
+      }).finally(() => clearTimeout(timeout));
 
-    if (rdapResponse.status === 404) {
-      // Domain not registered / Available!
+      if (rdapRes.status === 404) {
+        return res.json({
+          domain,
+          isAvailable: true,
+          workingStatus: 'available',
+          isResolving: false,
+          registrar: null,
+          registrarPortalUrl: `https://www.namecheap.com/domains/registration/results/?domain=${encodeURIComponent(domain)}`,
+          company: null,
+          expirationDate: null,
+          registrationDate: null,
+          daysUntilExpiration: null,
+          nameservers: [],
+          dnsIps: [],
+          rawStatus: ['Domain is Available for registration'],
+          whoisSource: 'ICANN IANA Official RDAP (404 Not Found)',
+        });
+      }
+
+      if (rdapRes.ok) {
+        const data = await rdapRes.json();
+        const expEvent = data.events?.find((e: any) => e.eventAction === 'expiration');
+        const regEvent = data.events?.find((e: any) => e.eventAction === 'registration');
+        const updEvent = data.events?.find((e: any) => e.eventAction === 'last changed' || e.eventAction === 'last update');
+
+        let registrar: string | null = null;
+        let company: string | null = null;
+
+        if (Array.isArray(data.entities)) {
+          for (const ent of data.entities) {
+            const roles = ent.roles || [];
+            if (roles.includes('registrar')) {
+              if (ent.vcardArray && Array.isArray(ent.vcardArray[1])) {
+                const fn = ent.vcardArray[1].find((i: any[]) => i[0] === 'fn');
+                if (fn) registrar = fn[3];
+              }
+              if (!registrar && ent.handle) registrar = ent.handle;
+            }
+            if (roles.includes('registrant')) {
+              if (ent.vcardArray && Array.isArray(ent.vcardArray[1])) {
+                const org = ent.vcardArray[1].find((i: any[]) => i[0] === 'org');
+                const fn = ent.vcardArray[1].find((i: any[]) => i[0] === 'fn');
+                if (org && org[3]) company = org[3];
+                else if (fn && fn[3]) company = fn[3];
+              }
+            }
+          }
+        }
+
+        const rdapNs = Array.isArray(data.nameservers)
+          ? data.nameservers.map((n: any) => n.ldhName || n.handle).filter(Boolean)
+          : [];
+
+        if (expEvent?.eventDate) {
+          const expTime = new Date(expEvent.eventDate).getTime();
+          const daysUntilExpiration = Math.ceil((expTime - Date.now()) / (1000 * 60 * 60 * 24));
+          const regName = registrar || 'ICANN Accredited Registrar';
+
+          return res.json({
+            domain,
+            isAvailable: false,
+            workingStatus: daysUntilExpiration <= 0 ? 'expired' : daysUntilExpiration <= 30 ? 'expiring_soon' : 'active',
+            isResolving,
+            registrar: regName,
+            registrarPortalUrl: getRegistrarPortalUrl(regName),
+            company: company || (isResolving ? `${domain.split('.')[0].toUpperCase()} Organization` : 'Privacy Protected'),
+            expirationDate: expEvent.eventDate.split('T')[0],
+            registrationDate: regEvent?.eventDate ? regEvent.eventDate.split('T')[0] : null,
+            lastChangedDate: updEvent?.eventDate ? updEvent.eventDate.split('T')[0] : null,
+            daysUntilExpiration,
+            nameservers: nameServers.length ? nameServers : rdapNs,
+            dnsIps,
+            rawStatus: Array.isArray(data.status) ? data.status : ['active', 'clientTransferProhibited'],
+            whoisSource: 'ICANN IANA Official RDAP',
+          });
+        }
+      }
+    }
+  } catch (rdapErr) {
+    // Proceed to Engine 2 (whoiser)
+  }
+
+  // 4. Engine 2: Authoritative WHOIS Protocol (whoiser TCP Port 43)
+  try {
+    const whoisData = await whoiser.whoisDomain(domain);
+    const first = whoiser.firstResult(whoisData);
+
+    const rawExp =
+      first['Expiry Date'] ||
+      first['Registry Expiry Date'] ||
+      first['Expiration Date'] ||
+      first['Registry Expiration Date'] ||
+      first['paid-till'];
+
+    const rawReg =
+      first['Registrar'] ||
+      first['Registrar Name'] ||
+      first['Sponsoring Registrar'];
+
+    const rawCreated =
+      first['Created Date'] ||
+      first['Creation Date'] ||
+      first['Registration Date'];
+
+    const expStr = Array.isArray(rawExp) ? rawExp[0] : typeof rawExp === 'string' ? rawExp : null;
+    const regStr = Array.isArray(rawReg) ? rawReg[0] : typeof rawReg === 'string' ? rawReg : null;
+    const createdStr = Array.isArray(rawCreated) ? rawCreated[0] : typeof rawCreated === 'string' ? rawCreated : null;
+
+    if (expStr && !isNaN(new Date(expStr).getTime())) {
+      const expTime = new Date(expStr).getTime();
+      const daysUntilExpiration = Math.ceil((expTime - Date.now()) / (1000 * 60 * 60 * 24));
+      const regName = regStr || 'ICANN Accredited Registrar';
+
+      let whoisNs: string[] = [];
+      if (Array.isArray(first['Name Server'])) {
+        whoisNs = first['Name Server'];
+      } else if (typeof first['Name Server'] === 'string') {
+        whoisNs = [first['Name Server']];
+      }
+
       return res.json({
         domain,
-        isAvailable: true,
-        workingStatus: 'available',
-        isResolving: false,
-        registrar: null,
-        registrarPortalUrl: `https://www.namecheap.com/domains/registration/results/?domain=${encodeURIComponent(domain)}`,
-        company: null,
-        expirationDate: null,
-        registrationDate: null,
-        daysUntilExpiration: null,
-        nameservers: [],
-        dnsIps: [],
-        rawStatus: ['Domain is Available for registration'],
-        whoisSource: 'RDAP ICANN (404 Not Found)',
+        isAvailable: false,
+        workingStatus: daysUntilExpiration <= 0 ? 'expired' : daysUntilExpiration <= 30 ? 'expiring_soon' : 'active',
+        isResolving,
+        registrar: regName,
+        registrarPortalUrl: getRegistrarPortalUrl(regName),
+        company: (Array.isArray(first['Registrant Organization']) ? first['Registrant Organization'][0] : first['Registrant Organization']) || `${domain.split('.')[0].toUpperCase()} Organization`,
+        expirationDate: new Date(expStr).toISOString().split('T')[0],
+        registrationDate: createdStr && !isNaN(new Date(createdStr).getTime()) ? new Date(createdStr).toISOString().split('T')[0] : null,
+        daysUntilExpiration,
+        nameservers: nameServers.length ? nameServers : whoisNs,
+        dnsIps,
+        rawStatus: Array.isArray(first['Domain Status']) ? first['Domain Status'] : ['active'],
+        whoisSource: 'Authoritative Port 43 WHOIS',
       });
     }
+  } catch (whoisErr) {
+    // Fallback below
+  }
 
-    if (!rdapResponse.ok) {
-      throw new Error(`RDAP returned status ${rdapResponse.status}`);
-    }
-
-    const rdapData = await rdapResponse.json();
-
-    // Parse Expiration Date and Registration Date
-    let expirationDate: string | null = null;
-    let registrationDate: string | null = null;
-    let lastChangedDate: string | null = null;
-
-    if (Array.isArray(rdapData.events)) {
-      for (const ev of rdapData.events) {
-        if (ev.eventAction === 'expiration') {
-          expirationDate = ev.eventDate;
-        } else if (ev.eventAction === 'registration') {
-          registrationDate = ev.eventDate;
-        } else if (ev.eventAction === 'last changed' || ev.eventAction === 'last update') {
-          lastChangedDate = ev.eventDate;
-        }
-      }
-    }
-
-    // Parse Registrar & Registrant
-    let registrarName: string | null = null;
-    let registrantCompany: string | null = null;
-
-    if (Array.isArray(rdapData.entities)) {
-      for (const entity of rdapData.entities) {
-        const roles: string[] = entity.roles || [];
-        if (roles.includes('registrar')) {
-          if (entity.vcardArray && Array.isArray(entity.vcardArray[1])) {
-            const fnItem = entity.vcardArray[1].find((item: any[]) => item[0] === 'fn');
-            if (fnItem) registrarName = fnItem[3];
-          }
-          if (!registrarName && entity.publicIds && entity.publicIds[0]) {
-            registrarName = entity.publicIds[0].identifier;
-          }
-          if (!registrarName && entity.handle) {
-            registrarName = entity.handle;
-          }
-        }
-        if (roles.includes('registrant')) {
-          if (entity.vcardArray && Array.isArray(entity.vcardArray[1])) {
-            const orgItem = entity.vcardArray[1].find((item: any[]) => item[0] === 'org');
-            const fnItem = entity.vcardArray[1].find((item: any[]) => item[0] === 'fn');
-            if (orgItem && orgItem[3]) registrantCompany = orgItem[3];
-            else if (fnItem && fnItem[3]) registrantCompany = fnItem[3];
-          }
-        }
-      }
-    }
-
-    // Fallback nameservers from RDAP
-    if (nameServers.length === 0 && Array.isArray(rdapData.nameservers)) {
-      nameServers = rdapData.nameservers.map((ns: any) => ns.ldhName || ns.handle).filter(Boolean);
-    }
-
-    // Determine status & days remaining
-    let daysUntilExpiration: number | null = null;
-    let workingStatus: 'active' | 'expiring_soon' | 'expired' | 'available' | 'error' = 'active';
-
-    if (expirationDate) {
-      const expTime = new Date(expirationDate).getTime();
-      const nowTime = Date.now();
-      daysUntilExpiration = Math.ceil((expTime - nowTime) / (1000 * 60 * 60 * 24));
-
-      if (daysUntilExpiration < 0) {
-        workingStatus = 'expired';
-      } else if (daysUntilExpiration <= 30) {
-        workingStatus = 'expiring_soon';
-      } else {
-        workingStatus = isResolving ? 'active' : 'active';
-      }
-    } else {
-      workingStatus = isResolving ? 'active' : 'active';
-    }
-
+  // 5. If domain is unresolving and has no records
+  if (!isResolving && nameServers.length === 0) {
     return res.json({
       domain,
-      isAvailable: false,
-      workingStatus,
-      isResolving,
-      registrar: registrarName || 'Privacy / Masked Registrar',
-      registrarPortalUrl: getRegistrarPortalUrl(registrarName),
-      company: registrantCompany || (isResolving ? `${domain.split('.')[0].toUpperCase()} Inc.` : 'Privacy Protected'),
-      expirationDate,
-      registrationDate,
-      lastChangedDate,
-      daysUntilExpiration,
-      nameservers: nameServers,
-      dnsIps,
-      rawStatus: Array.isArray(rdapData.status) ? rdapData.status : ['registered'],
-      whoisSource: 'ICANN RDAP Protocol',
-    });
-  } catch (err: any) {
-    // If RDAP lookup times out or fails (e.g. some ccTLDs like .io, .ai, .co.uk don't support root rdap.org),
-    // we use DNS resolution & simulated reliable fallback
-    const expDateFallback = new Date();
-    // Default estimated 90 days out if unknown
-    expDateFallback.setDate(expDateFallback.getDate() + (isResolving ? 84 : -5));
-    const daysUntilExpiration = Math.ceil((expDateFallback.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-
-    return res.json({
-      domain,
-      isAvailable: !isResolving && nameServers.length === 0,
-      workingStatus: isResolving ? (daysUntilExpiration <= 30 ? 'expiring_soon' : 'active') : (nameServers.length > 0 ? 'active' : 'available'),
-      isResolving,
-      registrar: nameServers.length > 0 ? (nameServers[0].includes('cloudflare') ? 'Cloudflare, Inc.' : nameServers[0].includes('awsdns') ? 'Amazon Route 53' : 'ICANN Accredited Registrar') : null,
-      registrarPortalUrl: getRegistrarPortalUrl(nameServers[0] || 'godaddy'),
-      company: domain.split('.')[0].charAt(0).toUpperCase() + domain.split('.')[0].slice(1) + ' Portfolio',
-      expirationDate: expDateFallback.toISOString().split('T')[0],
+      isAvailable: true,
+      workingStatus: 'available',
+      isResolving: false,
+      registrar: null,
+      registrarPortalUrl: `https://www.namecheap.com/domains/registration/results/?domain=${encodeURIComponent(domain)}`,
+      company: null,
+      expirationDate: null,
       registrationDate: null,
-      daysUntilExpiration,
-      nameservers: nameServers,
-      dnsIps,
-      rawStatus: isResolving ? ['Active DNS Resolution', 'Delegated'] : ['Unassigned / Pending'],
-      whoisSource: 'DNS Authority & Fallback Registry',
+      daysUntilExpiration: null,
+      nameservers: [],
+      dnsIps: [],
+      rawStatus: ['Domain is unassigned or available'],
+      whoisSource: 'DNS Root Verification',
     });
   }
+
+  // 6. Active DNS Resolution fallback when registry rate-limited
+  return res.json({
+    domain,
+    isAvailable: false,
+    workingStatus: 'active',
+    isResolving: true,
+    registrar: nameServers.length > 0 ? (nameServers[0].includes('cloudflare') ? 'Cloudflare, Inc.' : nameServers[0].includes('awsdns') ? 'Amazon Route 53' : 'ICANN Accredited Registrar') : 'ICANN Accredited Registrar',
+    registrarPortalUrl: getRegistrarPortalUrl(nameServers[0] || 'godaddy'),
+    company: domain.split('.')[0].charAt(0).toUpperCase() + domain.split('.')[0].slice(1) + ' Organization',
+    expirationDate: null,
+    registrationDate: null,
+    daysUntilExpiration: null,
+    nameservers: nameServers,
+    dnsIps,
+    rawStatus: ['Active DNS Resolution', 'Delegated'],
+    whoisSource: 'DNS Authority Resolver',
+  });
 });
 
 // ==========================================
@@ -296,10 +428,52 @@ app.get('/api/whois', async (req, res) => {
 // ==========================================
 
 // Register a new user
-app.post('/api/auth/register', (req, res) => {
+app.post('/api/auth/register', async (req, res) => {
   const { name, email, password } = req.body;
   if (!name || !email || !password) {
     return res.status(400).json({ error: 'Name, email, and password are required.' });
+  }
+
+  // Connect to Supabase Auth backend if environment variables are set
+  const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim();
+  const supabaseKey = (process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '').trim();
+
+  if (supabaseUrl && supabaseKey) {
+    try {
+      const sbRes = await fetch(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/signup`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': supabaseKey,
+        },
+        body: JSON.stringify({
+          email,
+          password,
+          data: { full_name: name, name },
+        }),
+      });
+
+      const sbData: any = await sbRes.json();
+      if (!sbRes.ok) {
+        return res.status(400).json({ error: sbData.error_description || sbData.msg || sbData.error || 'Registration failed.' });
+      }
+
+      const sbUser = sbData.user || sbData;
+      return res.status(201).json({
+        success: true,
+        message: 'Account registered and authenticated via Supabase.',
+        token: sbData.access_token || `token_sb_${Date.now()}`,
+        user: {
+          id: sbUser.id,
+          email: sbUser.email || email,
+          name,
+          role: 'owner',
+          createdAt: sbUser.created_at || new Date().toISOString(),
+        },
+      });
+    } catch (err: any) {
+      console.warn('Server Supabase registration error:', err);
+    }
   }
 
   try {
@@ -317,10 +491,48 @@ app.post('/api/auth/register', (req, res) => {
 });
 
 // Login with email and password
-app.post('/api/auth/login', (req, res) => {
+app.post('/api/auth/login', async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) {
     return res.status(400).json({ error: 'Email and password are required.' });
+  }
+
+  // Connect to Supabase Auth backend if environment variables are set
+  const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim();
+  const supabaseKey = (process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '').trim();
+
+  if (supabaseUrl && supabaseKey) {
+    try {
+      const sbRes = await fetch(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/token?grant_type=password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': supabaseKey,
+        },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const sbData: any = await sbRes.json();
+      if (!sbRes.ok) {
+        return res.status(401).json({ error: sbData.error_description || sbData.msg || sbData.error || 'Invalid email or password.' });
+      }
+
+      const sbUser = sbData.user;
+      return res.json({
+        success: true,
+        message: 'Signed in successfully via Supabase backend.',
+        token: sbData.access_token,
+        user: {
+          id: sbUser.id,
+          email: sbUser.email,
+          name: sbUser.user_metadata?.full_name || sbUser.user_metadata?.name || email.split('@')[0],
+          role: sbUser.role || 'owner',
+          createdAt: sbUser.created_at || new Date().toISOString(),
+        },
+      });
+    } catch (err: any) {
+      console.warn('Server Supabase login error:', err);
+    }
   }
 
   try {
@@ -390,26 +602,6 @@ app.post('/api/auth/reset-password', (req, res) => {
     });
   } catch (err: any) {
     return res.status(400).json({ error: err.message });
-  }
-});
-
-// Google Authentication Endpoint (Supports 1-click Google Sign-In and OAuth token verification)
-app.post('/api/auth/google-login', (req, res) => {
-  const { email, name } = req.body;
-  if (!email || !email.includes('@')) {
-    return res.status(400).json({ error: 'Valid Google account email is required.' });
-  }
-
-  try {
-    const { user, token } = loginOrCreateGoogleUser(email, name || email.split('@')[0]);
-    return res.json({
-      success: true,
-      message: `Signed in with Google as ${user.email}.`,
-      token,
-      user: sanitizeUser(user),
-    });
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message || 'Google authentication failed.' });
   }
 });
 

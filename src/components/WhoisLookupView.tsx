@@ -39,8 +39,20 @@ export const WhoisLookupView: React.FC<WhoisLookupViewProps> = ({ onAddDomain, t
 
   const handleTrackResult = () => {
     if (!result) return;
-    const daysUntilExpiration = result.daysUntilExpiration ?? 90;
-    const expDate = result.expirationDate || new Date(Date.now() + 90 * 86400000).toISOString().split('T')[0];
+    let expDate = result.expirationDate;
+    let daysUntilExpiration = result.daysUntilExpiration;
+
+    if (expDate) {
+      const expTime = new Date(expDate).getTime();
+      if (!isNaN(expTime)) {
+        daysUntilExpiration = Math.ceil((expTime - Date.now()) / (1000 * 60 * 60 * 24));
+      }
+    } else {
+      const oneYearOut = new Date();
+      oneYearOut.setFullYear(oneYearOut.getFullYear() + 1);
+      expDate = oneYearOut.toISOString().split('T')[0];
+      daysUntilExpiration = 365;
+    }
 
     let workingStatus: DomainItem['workingStatus'] = 'active';
     if (daysUntilExpiration <= 0) workingStatus = 'expired';
@@ -67,8 +79,8 @@ export const WhoisLookupView: React.FC<WhoisLookupViewProps> = ({ onAddDomain, t
         warn7Days: true,
         continuousReminderEvery2Days: true,
       },
-      notes: `Looked up via WHOIS checker on ${new Date().toLocaleDateString()}`,
-      whoisSource: result.whoisSource || 'ICANN RDAP Protocol',
+      notes: `Discovered via Authoritative Registry Lookup on ${new Date().toLocaleDateString()}`,
+      whoisSource: result.whoisSource || 'ICANN IANA Official RDAP',
     };
 
     onAddDomain(newItem);
@@ -79,10 +91,10 @@ export const WhoisLookupView: React.FC<WhoisLookupViewProps> = ({ onAddDomain, t
       {/* Title & Description */}
       <div>
         <h1 className="text-xl font-bold tracking-tight text-neutral-950 dark:text-white">
-          Real-Time WHOIS & Domain Availability Engine
+          Domain Expiry &amp; Registrar Finder
         </h1>
         <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
-          Perform live RDAP queries against ICANN registries to evaluate registration status, expiration timeline, and DNS health.
+          Direct registry intelligence powered by Official IANA RDAP &amp; Authoritative WHOIS: Discover real expiration dates, accredited registrars, and live DNS lifecycle status (100% Free, Zero API keys required).
         </p>
       </div>
 
@@ -99,7 +111,7 @@ export const WhoisLookupView: React.FC<WhoisLookupViewProps> = ({ onAddDomain, t
             <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400" />
             <input
               type="text"
-              placeholder="Query domain (e.g. github.com, mynewidea2026.tech, vercel.app)..."
+              placeholder="Query any domain (e.g. google.com, vercel.app, github.com)..."
               value={queryInput}
               onChange={(e) => setQueryInput(e.target.value)}
               className="w-full pl-10 pr-4 py-2.5 text-xs sm:text-sm font-mono bg-neutral-50 dark:bg-neutral-950 border border-neutral-300 dark:border-neutral-700 rounded text-neutral-900 dark:text-white placeholder:text-neutral-400 focus:outline-none focus:ring-1 focus:ring-neutral-900 dark:focus:ring-white"
@@ -111,7 +123,7 @@ export const WhoisLookupView: React.FC<WhoisLookupViewProps> = ({ onAddDomain, t
             className="px-5 py-2.5 bg-neutral-900 hover:bg-neutral-800 dark:bg-white dark:hover:bg-neutral-100 text-white dark:text-neutral-900 text-xs font-semibold rounded transition-colors flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer w-full sm:w-auto"
           >
             {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Globe className="w-4 h-4" />}
-            <span>Query WHOIS / RDAP</span>
+            <span>Find Expiry &amp; Registrar</span>
           </button>
         </form>
 

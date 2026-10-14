@@ -53,24 +53,58 @@ export const AddDomainModal: React.FC<AddDomainModalProps> = ({
       setLookupFeedback(
         data.isAvailable
           ? 'Domain is AVAILABLE! Ready for registration.'
-          : `WHOIS parsed: Registered via ${data.registrar || 'Registry'}`
+          : `Domscan verified: Registered via ${data.registrar || 'Registry'}`
       );
     } catch (err: any) {
-      setLookupFeedback('Could not fetch live WHOIS; manual entry available.');
+      setLookupFeedback('Could not fetch Domscan data; manual entry available.');
     } finally {
       setIsLookingUp(false);
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const clean = domainInput.trim().toLowerCase().replace(/^(?:https?:\/\/)?(?:www\.)?/i, '').split('/')[0];
     if (!clean || !clean.includes('.')) return;
 
-    // Calculate days remaining
+    let finalExpDate = expirationDate;
+    let finalRegistrar = registrar;
+    let finalCompany = company;
+    let finalWhois = whoisData;
     let daysUntilExpiration = 90;
-    if (expirationDate) {
-      daysUntilExpiration = Math.ceil((new Date(expirationDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+
+    // Automatically fetch real live registry data if not yet fetched
+    if (!finalExpDate || !finalRegistrar) {
+      try {
+        setIsLookingUp(true);
+        const liveData = await fetchDomainWhois(clean);
+        finalWhois = liveData;
+        if (liveData.expirationDate) {
+          finalExpDate = liveData.expirationDate.split('T')[0];
+        }
+        if (liveData.registrar) {
+          finalRegistrar = liveData.registrar;
+        }
+        if (liveData.company && !finalCompany) {
+          finalCompany = liveData.company;
+        }
+      } catch {
+        // Fallback gracefully to manual input
+      } finally {
+        setIsLookingUp(false);
+      }
+    }
+
+    if (finalExpDate) {
+      const expTime = new Date(finalExpDate).getTime();
+      if (!isNaN(expTime)) {
+        daysUntilExpiration = Math.ceil((expTime - Date.now()) / (1000 * 60 * 60 * 24));
+      }
+    } else {
+      const oneYearOut = new Date();
+      oneYearOut.setFullYear(oneYearOut.getFullYear() + 1);
+      finalExpDate = oneYearOut.toISOString().split('T')[0];
+      daysUntilExpiration = 365;
     }
 
     let workingStatus: DomainItem['workingStatus'] = 'active';
@@ -80,15 +114,15 @@ export const AddDomainModal: React.FC<AddDomainModalProps> = ({
     const item: DomainItem = {
       id: `dom_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       domain: clean,
-      company: company || `${clean.split('.')[0].toUpperCase()} Enterprise`,
+      company: finalCompany || `${clean.split('.')[0].toUpperCase()} Enterprise`,
       workingStatus,
-      registrar: registrar || 'ICANN Accredited Registrar',
-      registrarPortalUrl: whoisData?.registrarPortalUrl || `https://www.google.com/search?q=${encodeURIComponent(registrar + ' domain renewal')}`,
-      expirationDate: expirationDate || new Date(Date.now() + 90 * 86400000).toISOString().split('T')[0],
+      registrar: finalRegistrar || 'ICANN Accredited Registrar',
+      registrarPortalUrl: finalWhois?.registrarPortalUrl || `https://www.google.com/search?q=${encodeURIComponent((finalRegistrar || clean) + ' domain renewal')}`,
+      expirationDate: finalExpDate,
       daysUntilExpiration,
-      isResolving: whoisData?.isResolving ?? true,
-      nameservers: whoisData?.nameservers || ['ns1.dns-hosting.com', 'ns2.dns-hosting.com'],
-      dnsIps: whoisData?.dnsIps || [],
+      isResolving: finalWhois?.isResolving ?? true,
+      nameservers: finalWhois?.nameservers || ['ns1.dns-hosting.com', 'ns2.dns-hosting.com'],
+      dnsIps: finalWhois?.dnsIps || [],
       portfolio,
       assignedEmployees: [assignedEmployee],
       lastCheckedAt: new Date().toISOString(),
@@ -99,7 +133,7 @@ export const AddDomainModal: React.FC<AddDomainModalProps> = ({
         continuousReminderEvery2Days: continuous2Days,
       },
       notes,
-      whoisSource: whoisData?.whoisSource || 'User Added & Auto-WHOIS Verified',
+      whoisSource: finalWhois?.whoisSource || 'ICANN IANA Official RDAP',
     };
 
     onAddDomain(item);

@@ -92,7 +92,8 @@ export const AlertsSettingsView: React.FC<AlertsSettingsViewProps> = ({
 
   // Email test status
   const [isTestingEmail, setIsTestingEmail] = useState(false);
-  const [emailStatus, setEmailStatus] = useState<{ success: boolean; msg: string; provider?: string } | null>(null);
+  const [emailStatus, setEmailStatus] = useState<{ success: boolean; msg: string; provider?: string; logsUrl?: string } | null>(null);
+  const [mailtrapServerStatus, setMailtrapServerStatus] = useState<{ configured: boolean; smtpHost?: string; smtpPort?: number; senderEmail?: string; logsUrl?: string } | null>(null);
 
   // Provider configuration visibility toggle
   const [showProviderSetup, setShowProviderSetup] = useState(Boolean(formData.emailApiKey));
@@ -143,6 +144,24 @@ export const AlertsSettingsView: React.FC<AlertsSettingsViewProps> = ({
       }
     }
     checkBotInfo();
+
+    // Check server Mailtrap SMTP status
+    async function checkMailtrapStatus() {
+      try {
+        const res = await fetch('/api/mailtrap/status');
+        const data = await res.json();
+        setMailtrapServerStatus(data);
+        if (data.configured) {
+          setFormData((prev) => ({
+            ...prev,
+            emailProvider: prev.emailProvider === 'direct' ? 'mailtrap' : prev.emailProvider,
+          }));
+        }
+      } catch (err) {
+        console.warn('Could not check Mailtrap status:', err);
+      }
+    }
+    checkMailtrapStatus();
   }, []);
 
   // Automatic background polling for Telegram link verification
@@ -656,8 +675,9 @@ export const AlertsSettingsView: React.FC<AlertsSettingsViewProps> = ({
 
       setEmailStatus({
         success: true,
-        msg: data.message || `Test alert dispatched to ${recipients.length} Gmail address(es): ${recipients.join(', ')}.`,
+        msg: data.message || `Test alert dispatched to ${recipients.length} address(es): ${recipients.join(', ')}.`,
         provider: data.provider,
+        logsUrl: data.logsUrl || (data.provider?.includes('mailtrap') ? 'https://mailtrap.io/sending/email_logs' : undefined),
       });
 
       onAddNotificationLog({
@@ -1433,38 +1453,51 @@ export const AlertsSettingsView: React.FC<AlertsSettingsViewProps> = ({
             </div>
 
             {showProviderSetup && (
-              <div className="mt-3.5 p-4 rounded-md border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 space-y-3">
+              <div className="mt-3.5 p-4 rounded-md border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 space-y-3.5">
                 <div className="flex items-center justify-between text-xs border-b border-neutral-200 dark:border-neutral-800 pb-2">
-                  <span className="font-semibold text-neutral-800 dark:text-neutral-200">
-                    Direct Inbox Delivery (Resend API)
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-neutral-800 dark:text-neutral-200">
+                      Mailtrap SMTP Email Delivery
+                    </span>
+                    {mailtrapServerStatus?.configured && (
+                      <span className="px-1.5 py-0.5 text-[10px] rounded bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 font-mono font-medium">
+                        ENV Configured
+                      </span>
+                    )}
+                  </div>
                   <a
-                    href="https://resend.com"
+                    href="https://mailtrap.io/sending/email_logs"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-xs text-neutral-500 hover:text-neutral-900 dark:hover:text-white inline-flex items-center gap-1"
+                    className="text-xs text-neutral-500 hover:text-neutral-900 dark:hover:text-white inline-flex items-center gap-1 font-mono"
                   >
-                    <span>Get Free Resend Key (100 free emails/day)</span>
+                    <span>Check Sent Logs</span>
                     <ExternalLink className="w-3 h-3" />
                   </a>
+                </div>
+
+                <div className="text-[11px] text-neutral-500 dark:text-neutral-400 space-y-1">
+                  <p>
+                    Sends via Mailtrap SMTP: <code className="font-mono text-[10px] bg-white dark:bg-neutral-900 px-1 py-0.5 rounded border border-neutral-200 dark:border-neutral-800">smtp://live.smtp.mailtrap.io:587</code> with user <code className="font-mono text-[10px] bg-white dark:bg-neutral-900 px-1 py-0.5 rounded border border-neutral-200 dark:border-neutral-800">api</code>.
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">
-                      Email API Key (Resend)
+                      Mailtrap API Token
                     </label>
                     <div className="relative">
                       <Key className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
                       <input
                         type="password"
-                        placeholder="re_123456789..."
+                        placeholder={mailtrapServerStatus?.configured ? 'Configured via MAILTRAP_API_TOKEN env' : 'Enter Mailtrap API Token...'}
                         value={formData.emailApiKey || ''}
                         onChange={(e) =>
                           setFormData({
                             ...formData,
                             emailApiKey: e.target.value,
-                            emailProvider: e.target.value.startsWith('re_') ? 'resend' : 'direct',
+                            emailProvider: 'mailtrap',
                           })
                         }
                         className="w-full pl-9 pr-3.5 py-2 text-xs font-mono bg-white dark:bg-neutral-900 border border-neutral-300 dark:border-neutral-700 rounded-md text-neutral-900 dark:text-white"
@@ -1474,16 +1507,39 @@ export const AlertsSettingsView: React.FC<AlertsSettingsViewProps> = ({
 
                   <div>
                     <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">
-                      Custom Sender Address (Optional)
+                      Verified Sender Email
                     </label>
                     <input
                       type="text"
-                      placeholder="DomainGuard Alerts <onboarding@resend.dev>"
+                      placeholder="hello@demomailtrap.co"
                       value={formData.emailSenderAddress || ''}
-                      onChange={(e) => setFormData({ ...formData, emailSenderAddress: e.target.value })}
+                      onChange={(e) => setFormData({ ...formData, emailSenderAddress: e.target.value, emailProvider: 'mailtrap' })}
                       className="w-full px-3.5 py-2 text-xs font-mono bg-white dark:bg-neutral-900 border border-neutral-300 dark:border-neutral-700 rounded-md text-neutral-900 dark:text-white"
                     />
                   </div>
+                </div>
+
+                <div className="pt-1 flex items-center justify-between text-[11px] text-neutral-500 dark:text-neutral-400">
+                  <span>
+                    Logs & Delivery Analytics:{' '}
+                    <a
+                      href="https://mailtrap.io/sending/email_logs"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-neutral-800 dark:text-neutral-200 underline font-mono"
+                    >
+                      mailtrap.io/sending/email_logs
+                    </a>
+                  </span>
+                  <a
+                    href="https://mailtrap.io/sending/domains"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="hover:underline flex items-center gap-1"
+                  >
+                    <span>Manage Sending Domains</span>
+                    <ExternalLink className="w-2.5 h-2.5" />
+                  </a>
                 </div>
               </div>
             )}
@@ -1503,12 +1559,23 @@ export const AlertsSettingsView: React.FC<AlertsSettingsViewProps> = ({
               ) : (
                 <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-rose-600 dark:text-rose-400" />
               )}
-              <div className="space-y-0.5">
+              <div className="space-y-1">
                 <span className="font-semibold block">{emailStatus.msg}</span>
                 {emailStatus.provider && (
                   <span className="text-[11px] opacity-80 block font-mono">
-                    Provider: {emailStatus.provider === 'resend' ? 'Resend API (Live Inbox Delivery)' : 'DomainGuard Dispatcher'}
+                    Provider: {emailStatus.provider.includes('mailtrap') ? 'Mailtrap SMTP (live.smtp.mailtrap.io:587)' : emailStatus.provider === 'resend' ? 'Resend API' : 'DomainGuard Dispatcher'}
                   </span>
+                )}
+                {emailStatus.logsUrl && (
+                  <a
+                    href={emailStatus.logsUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-800 dark:text-emerald-300 hover:underline mt-0.5"
+                  >
+                    <span>Check Sent Logs in Mailtrap</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
                 )}
               </div>
             </div>

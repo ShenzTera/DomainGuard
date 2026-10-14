@@ -1,6 +1,6 @@
 import React from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Sun, Moon, LogOut, Shield, Database } from 'lucide-react';
+import { Sun, Moon, LogOut, Shield } from 'lucide-react';
 
 export type NavTab = 'dashboard' | 'whois' | 'alerts' | 'team';
 
@@ -21,7 +21,7 @@ export const TopNavigation: React.FC<TopNavigationProps> = ({
   trackedCount,
   nearExpiryCount,
 }) => {
-  const { user, logout, isLiveSupabase } = useAuth();
+  const { user, logout } = useAuth();
 
   return (
     <header className="border-b border-neutral-200 dark:border-neutral-800 bg-white/95 dark:bg-neutral-900/95 sticky top-0 z-40 backdrop-blur-xs">
@@ -72,7 +72,7 @@ export const TopNavigation: React.FC<TopNavigationProps> = ({
                   : 'text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white'
               }`}
             >
-              WHOIS &amp; Availability
+              Expiry &amp; Registrar Finder
               {currentTab === 'whois' && (
                 <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-neutral-950 dark:bg-white -mb-4" />
               )}
@@ -109,15 +109,6 @@ export const TopNavigation: React.FC<TopNavigationProps> = ({
 
           {/* Zone 3: 1-2 primary actions */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-            {/* Supabase backend status indicator */}
-            <div
-              className="hidden sm:flex items-center gap-1 text-[11px] font-mono text-neutral-500 dark:text-neutral-400 px-2 py-1 rounded bg-neutral-100 dark:bg-neutral-800"
-              title={isLiveSupabase ? 'Active Supabase Backend Session' : 'Local Authenticated Session'}
-            >
-              <Database className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
-              <span>{isLiveSupabase ? 'Supabase live' : 'Supabase session'}</span>
-            </div>
-
             {/* Dark Mode toggle */}
             <button
               type="button"
@@ -176,7 +167,7 @@ export const TopNavigation: React.FC<TopNavigationProps> = ({
                 : 'text-neutral-600 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white bg-neutral-100/70 dark:bg-neutral-800/70'
             }`}
           >
-            WHOIS &amp; Availability
+            Expiry &amp; Registrar
           </button>
 
           <button

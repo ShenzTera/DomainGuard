@@ -56,7 +56,7 @@ export interface AlertSettings {
   emailAlertsEnabled: boolean;
   alertEmail: string; // primary fallback
   alertEmails: string[]; // multiple recipient Gmails & corporate addresses
-  emailProvider?: 'direct' | 'resend' | 'sendgrid' | 'smtp';
+  emailProvider?: 'direct' | 'mailtrap' | 'resend' | 'sendgrid' | 'smtp';
   emailApiKey?: string;
   emailSenderName?: string;
   emailSenderAddress?: string;
