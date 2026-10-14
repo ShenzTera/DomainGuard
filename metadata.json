@@ -1,6 +1,0 @@
-{
-  "name": "DomainGuard - Real-Time WHOIS & Expiration Intelligence",
-  "description": "Real-time WHOIS lookup, domain availability monitoring, priority expiration tracking, Google Sheets import, automated email & Telegram alerts, and team access management.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}
