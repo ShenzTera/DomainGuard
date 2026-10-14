@@ -669,6 +669,31 @@ export function disconnectTelegramUser(userId: string): boolean {
   return true;
 }
 
+export function loginOrCreateGoogleUser(email: string, name: string): { user: UserRecord; token: string } {
+  const cleanEmail = email.trim().toLowerCase();
+  const cleanName = name.trim() || cleanEmail.split('@')[0];
+
+  let user = usersMap.get(cleanEmail);
+  if (!user) {
+    const salt = crypto.randomBytes(16).toString('hex');
+    const passwordHash = hashPassword(crypto.randomBytes(32).toString('hex'), salt);
+    user = {
+      id: `usr_google_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`,
+      email: cleanEmail,
+      name: cleanName,
+      passwordHash,
+      salt,
+      role: usersMap.size === 0 ? 'owner' : 'admin',
+      createdAt: new Date().toISOString(),
+    };
+    usersMap.set(cleanEmail, user);
+    usersById.set(user.id, user);
+    persistUsers();
+  }
+
+  const token = createSession(user.id);
+  return { user, token };
+}
 
 export function getAllUsers(): UserRecord[] {
   return Array.from(usersById.values());

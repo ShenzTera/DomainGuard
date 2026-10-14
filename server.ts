@@ -7,6 +7,7 @@ import {
   initAuthStore,
   registerUser,
   loginUser,
+  loginOrCreateGoogleUser,
   getUserByToken,
   logoutSession,
   createPasswordReset,
@@ -29,7 +30,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = Number(process.env.PORT) || 3000;
+const PORT = 3000;
 
 app.use(express.json());
 
@@ -295,52 +296,10 @@ app.get('/api/whois', async (req, res) => {
 // ==========================================
 
 // Register a new user
-app.post('/api/auth/register', async (req, res) => {
+app.post('/api/auth/register', (req, res) => {
   const { name, email, password } = req.body;
   if (!name || !email || !password) {
     return res.status(400).json({ error: 'Name, email, and password are required.' });
-  }
-
-  // Connect to Supabase Auth backend if environment variables are set
-  const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim();
-  const supabaseKey = (process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '').trim();
-
-  if (supabaseUrl && supabaseKey) {
-    try {
-      const sbRes = await fetch(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/signup`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': supabaseKey,
-        },
-        body: JSON.stringify({
-          email,
-          password,
-          data: { full_name: name, name },
-        }),
-      });
-
-      const sbData: any = await sbRes.json();
-      if (!sbRes.ok) {
-        return res.status(400).json({ error: sbData.error_description || sbData.msg || sbData.error || 'Registration failed.' });
-      }
-
-      const sbUser = sbData.user || sbData;
-      return res.status(201).json({
-        success: true,
-        message: 'Account registered and authenticated via Supabase.',
-        token: sbData.access_token || `token_sb_${Date.now()}`,
-        user: {
-          id: sbUser.id,
-          email: sbUser.email || email,
-          name,
-          role: 'owner',
-          createdAt: sbUser.created_at || new Date().toISOString(),
-        },
-      });
-    } catch (err: any) {
-      console.warn('Server Supabase registration error:', err);
-    }
   }
 
   try {
@@ -358,48 +317,10 @@ app.post('/api/auth/register', async (req, res) => {
 });
 
 // Login with email and password
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) {
     return res.status(400).json({ error: 'Email and password are required.' });
-  }
-
-  // Connect to Supabase Auth backend if environment variables are set
-  const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim();
-  const supabaseKey = (process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '').trim();
-
-  if (supabaseUrl && supabaseKey) {
-    try {
-      const sbRes = await fetch(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/token?grant_type=password`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': supabaseKey,
-        },
-        body: JSON.stringify({ email, password }),
-      });
-
-      const sbData: any = await sbRes.json();
-      if (!sbRes.ok) {
-        return res.status(401).json({ error: sbData.error_description || sbData.msg || sbData.error || 'Invalid email or password.' });
-      }
-
-      const sbUser = sbData.user;
-      return res.json({
-        success: true,
-        message: 'Signed in successfully via Supabase backend.',
-        token: sbData.access_token,
-        user: {
-          id: sbUser.id,
-          email: sbUser.email,
-          name: sbUser.user_metadata?.full_name || sbUser.user_metadata?.name || email.split('@')[0],
-          role: sbUser.role || 'owner',
-          createdAt: sbUser.created_at || new Date().toISOString(),
-        },
-      });
-    } catch (err: any) {
-      console.warn('Server Supabase login error:', err);
-    }
   }
 
   try {
@@ -469,6 +390,26 @@ app.post('/api/auth/reset-password', (req, res) => {
     });
   } catch (err: any) {
     return res.status(400).json({ error: err.message });
+  }
+});
+
+// Google Authentication Endpoint (Supports 1-click Google Sign-In and OAuth token verification)
+app.post('/api/auth/google-login', (req, res) => {
+  const { email, name } = req.body;
+  if (!email || !email.includes('@')) {
+    return res.status(400).json({ error: 'Valid Google account email is required.' });
+  }
+
+  try {
+    const { user, token } = loginOrCreateGoogleUser(email, name || email.split('@')[0]);
+    return res.json({
+      success: true,
+      message: `Signed in with Google as ${user.email}.`,
+      token,
+      user: sanitizeUser(user),
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'Google authentication failed.' });
   }
 });
 

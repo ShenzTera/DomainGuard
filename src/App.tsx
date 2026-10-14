@@ -48,21 +48,20 @@ function MainApplication() {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [selectedDomainForDetails, setSelectedDomainForDetails] = useState<DomainItem | null>(null);
 
-  // Load initial data isolated to the authenticated user
+  // Load initial data
   useEffect(() => {
-    if (!user) return;
-    const loadedDomains = loadDomains(user.id);
+    const loadedDomains = loadDomains();
     setDomains(loadedDomains);
-    setSettings(loadSettings(user.id, user.email));
-    setNotifications(loadNotifications(user.id));
-    setTeamMembers(loadTeam(user.id));
-  }, [user?.id, user?.email]);
+    setSettings(loadSettings());
+    setNotifications(loadNotifications());
+    setTeamMembers(loadTeam());
+  }, []);
 
   // Sync domains to storage whenever modified
   const updateDomains = useCallback((newDomains: DomainItem[]) => {
     setDomains(newDomains);
-    saveDomains(newDomains, user?.id);
-  }, [user?.id]);
+    saveDomains(newDomains);
+  }, []);
 
   // Periodic automatic updates ticker & continuous alert scheduler
   useEffect(() => {
@@ -175,7 +174,7 @@ function MainApplication() {
             };
             const updatedLogs = [tgLog, ...notifications];
             setNotifications(updatedLogs);
-            saveNotifications(updatedLogs, user?.id);
+            saveNotifications(updatedLogs);
           }
         } catch (err) {
           console.warn('Telegram batch dispatch notification warning:', err);
@@ -195,7 +194,7 @@ function MainApplication() {
         };
         setNotifications((curr) => {
           const next = [emailLog, ...curr];
-          saveNotifications(next, user?.id);
+          saveNotifications(next);
           return next;
         });
       }
@@ -229,7 +228,7 @@ function MainApplication() {
     };
     const updatedLogs = [log, ...notifications];
     setNotifications(updatedLogs);
-    saveNotifications(updatedLogs, user?.id);
+    saveNotifications(updatedLogs);
   };
 
   const handleDeleteDomain = (id: string) => {
@@ -255,25 +254,25 @@ function MainApplication() {
 
   const handleSaveSettings = (newSettings: AlertSettings) => {
     setSettings(newSettings);
-    saveSettings(newSettings, user?.id);
+    saveSettings(newSettings);
   };
 
   const handleAddNotificationLog = (log: NotificationLog) => {
     const updated = [log, ...notifications];
     setNotifications(updated);
-    saveNotifications(updated, user?.id);
+    saveNotifications(updated);
   };
 
   const handleAddTeamMember = (member: TeamMember) => {
     const updated = [...teamMembers, member];
     setTeamMembers(updated);
-    saveTeam(updated, user?.id);
+    saveTeam(updated);
   };
 
   const handleRemoveTeamMember = (id: string) => {
     const updated = teamMembers.filter((m) => m.id !== id);
     setTeamMembers(updated);
-    saveTeam(updated, user?.id);
+    saveTeam(updated);
   };
 
   if (loading) {

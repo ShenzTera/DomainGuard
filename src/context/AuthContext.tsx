@@ -2,15 +2,9 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import {
   getSupabaseClient,
   getSupabaseConfig,
+  saveSupabaseConfig,
+  clearSupabaseConfig,
 } from '../lib/supabase';
-import {
-  clientLogin,
-  clientRegister,
-  clientForgotPassword,
-  clientResetPassword,
-  clientGetSession,
-  clientLogout,
-} from '../lib/clientAuthStore';
 
 export interface AuthUser {
   id: string;
@@ -26,23 +20,21 @@ interface AuthContextType {
   user: AuthUser | null;
   token: string | null;
   loading: boolean;
+  isLiveSupabase: boolean;
+  supabaseUrl: string;
   login: (email: string, password: string) => Promise<{ success: boolean; message: string; user?: AuthUser }>;
   register: (name: string, email: string, password: string) => Promise<{ success: boolean; message: string; user?: AuthUser }>;
+  loginWithGoogle: (email: string, name?: string) => Promise<{ success: boolean; message: string; user?: AuthUser }>;
   forgotPassword: (email: string) => Promise<{ success: boolean; message: string; resetCode?: string; resetToken?: string }>;
-  resetPassword: (key: string, newPass: string) => Promise<{ success: boolean; message: string }>;
+  resetPassword: (key: string, newPassword: string) => Promise<{ success: boolean; message: string }>;
   logout: () => Promise<void>;
   updateUser: (updates: Partial<AuthUser>) => void;
+  configureSupabase: (url: string, anonKey: string) => Promise<{ success: boolean; error?: string }>;
+  resetSupabaseConfig: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
 const TOKEN_KEY = 'domainguard_auth_token';
-
-function isStaticHostFallback(res: Response, contentType: string): boolean {
-  if (res.status === 404 || res.status === 405 || res.status === 502) return true;
-  if (contentType.includes('text/html')) return true;
-  return false;
-}
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -53,76 +45,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return null;
   });
   const [loading, setLoading] = useState(true);
+  const [isLiveSupabase, setIsLiveSupabase] = useState(false);
+  const [supabaseUrl, setSupabaseUrl] = useState('');
 
-  // Initialize auth state: Check Supabase session first, then server/local session
+  // Initialize auth state from server
   useEffect(() => {
     let mounted = true;
-    let authSubscription: { unsubscribe: () => void } | null = null;
 
-    async function initAuth() {
+    async function checkAuthSession() {
       const config = getSupabaseConfig();
-      const hasSupabaseCreds = Boolean(config.url && config.anonKey);
-      const client = getSupabaseClient();
-
-      // 1. If Supabase is configured via build env, listen to session
-      if (client && hasSupabaseCreds) {
-        try {
-          const { data: { session } } = await client.auth.getSession();
-          if (mounted && session?.user) {
-            const authUser: AuthUser = {
-              id: session.user.id,
-              email: session.user.email || '',
-              name:
-                session.user.user_metadata?.full_name ||
-                session.user.user_metadata?.name ||
-                session.user.email?.split('@')[0] ||
-                'User',
-              role: session.user.role || 'owner',
-              createdAt: session.user.created_at,
-            };
-            setUser(authUser);
-            setToken(session.access_token);
-            localStorage.setItem(TOKEN_KEY, session.access_token);
-            setLoading(false);
-          }
-
-          // Subscribe to Supabase auth changes
-          const { data: { subscription } } = client.auth.onAuthStateChange((_event, session) => {
-            if (!mounted) return;
-            if (session?.user) {
-              const authUser: AuthUser = {
-                id: session.user.id,
-                email: session.user.email || '',
-                name:
-                  session.user.user_metadata?.full_name ||
-                  session.user.user_metadata?.name ||
-                  session.user.email?.split('@')[0] ||
-                  'User',
-                role: session.user.role || 'owner',
-                createdAt: session.user.created_at,
-              };
-              setUser(authUser);
-              setToken(session.access_token);
-              localStorage.setItem(TOKEN_KEY, session.access_token);
-            }
-          });
-          authSubscription = subscription;
-        } catch (sbErr) {
-          console.warn('Supabase auth listener initialization:', sbErr);
-        }
+      setSupabaseUrl(config.url);
+      if (config.url && config.anonKey) {
+        setIsLiveSupabase(true);
       }
 
-      // 2. If no user resolved yet from Supabase, check stored token / backend
       const storedToken = localStorage.getItem(TOKEN_KEY);
-      if (storedToken && mounted && !user) {
-        let serverSessionChecked = false;
+      if (storedToken) {
         try {
           const res = await fetch('/api/auth/me', {
             headers: { Authorization: `Bearer ${storedToken}` },
           });
 
-          const contentType = res.headers.get('content-type') || '';
-          if (res.ok && contentType.includes('application/json')) {
+          if (res.ok) {
             const data = await res.json();
             if (mounted && data.user) {
               setUser(data.user);
@@ -130,23 +74,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               setLoading(false);
               return;
             }
-            serverSessionChecked = true;
-          } else if (res.status === 401) {
-            serverSessionChecked = true;
+          } else {
+            // Token expired or invalid
+            localStorage.removeItem(TOKEN_KEY);
+            if (mounted) {
+              setToken(null);
+              setUser(null);
+            }
           }
-        } catch {
-          // Server offline or static host (Cloudflare Pages)
+        } catch (err) {
+          console.warn('Auth check error:', err);
         }
+      }
 
-        // If backend was not reached or static host detected, check client-side local session
-        if (!serverSessionChecked && mounted) {
-          const localUser = clientGetSession(storedToken);
-          if (localUser) {
-            setUser(localUser);
-            setToken(storedToken);
-            setLoading(false);
-            return;
+      // Check if Supabase session is available
+      const client = getSupabaseClient();
+      if (client && config.url && config.anonKey) {
+        try {
+          const { data: { session } } = await client.auth.getSession();
+          if (mounted && session?.user) {
+            setUser({
+              id: session.user.id,
+              email: session.user.email || '',
+              name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'User',
+              role: session.user.role || 'owner',
+            });
           }
+        } catch (e) {
+          // ignore
         }
       }
 
@@ -155,117 +110,51 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    initAuth();
+    checkAuthSession();
 
     return () => {
       mounted = false;
-      if (authSubscription) {
-        authSubscription.unsubscribe();
-      }
     };
   }, []);
 
   const login = async (email: string, password: string): Promise<{ success: boolean; message: string; user?: AuthUser }> => {
     const cleanEmail = email.trim().toLowerCase();
 
-    if (!cleanEmail) {
-      throw new Error('Please enter your email address.');
-    }
-    if (!password) {
-      throw new Error('Please enter your password.');
-    }
+    // 1. Authenticate with backend API
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: cleanEmail, password }),
+    });
 
-    // 1. Direct Supabase Authentication if configured via env
-    const client = getSupabaseClient();
-    const config = getSupabaseConfig();
-    if (client && config.url && config.anonKey) {
-      const { data, error } = await client.auth.signInWithPassword({
-        email: cleanEmail,
-        password,
-      });
-
-      if (error) {
-        throw new Error(error.message || 'Invalid email or password.');
-      }
-
-      if (data.user && data.session) {
-        const authUser: AuthUser = {
-          id: data.user.id,
-          email: data.user.email || cleanEmail,
-          name:
-            data.user.user_metadata?.full_name ||
-            data.user.user_metadata?.name ||
-            cleanEmail.split('@')[0],
-          role: data.user.role || 'owner',
-          createdAt: data.user.created_at,
-        };
-        localStorage.setItem(TOKEN_KEY, data.session.access_token);
-        setToken(data.session.access_token);
-        setUser(authUser);
-
-        return {
-          success: true,
-          message: 'Signed in successfully.',
-          user: authUser,
-        };
-      }
-    }
-
-    // 2. Try Backend API (Cloudflare Pages Functions or Express Server)
+    let data: any = {};
     try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: cleanEmail, password }),
-      });
-
-      const contentType = res.headers.get('content-type') || '';
-
-      if (contentType.includes('application/json')) {
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          throw new Error(data.error || 'Failed to sign in. Please check your credentials.');
-        }
-
-        if (data.token && data.user) {
-          localStorage.setItem(TOKEN_KEY, data.token);
-          setToken(data.token);
-          setUser(data.user);
-        }
-
-        return {
-          success: true,
-          message: data.message || 'Signed in successfully.',
-          user: data.user,
-        };
-      }
-
-      if (isStaticHostFallback(res, contentType)) {
-        const fallbackRes = clientLogin(cleanEmail, password);
-        setToken(fallbackRes.token);
-        setUser(fallbackRes.user);
-        return fallbackRes;
-      }
-    } catch (err: any) {
-      if (
-        err.message &&
-        !err.message.includes('fetch') &&
-        !err.message.includes('NetworkError') &&
-        !err.message.includes('Failed to fetch')
-      ) {
-        throw err;
-      }
-
-      const fallbackRes = clientLogin(cleanEmail, password);
-      setToken(fallbackRes.token);
-      setUser(fallbackRes.user);
-      return fallbackRes;
+      data = await res.json();
+    } catch {
+      data = { error: `Server error (${res.status})` };
     }
 
-    const fallbackRes = clientLogin(cleanEmail, password);
-    setToken(fallbackRes.token);
-    setUser(fallbackRes.user);
-    return fallbackRes;
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to sign in.');
+    }
+
+    if (data.token && data.user) {
+      localStorage.setItem(TOKEN_KEY, data.token);
+      setToken(data.token);
+      setUser(data.user);
+    }
+
+    // Optional Supabase sync if credentials exist
+    const client = getSupabaseClient();
+    if (client && isLiveSupabase) {
+      client.auth.signInWithPassword({ email: cleanEmail, password }).catch(() => {});
+    }
+
+    return {
+      success: true,
+      message: data.message || 'Signed in successfully.',
+      user: data.user,
+    };
   };
 
   const register = async (
@@ -276,258 +165,174 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const cleanEmail = email.trim().toLowerCase();
     const cleanName = name.trim();
 
-    if (!cleanName) {
-      throw new Error('Full name is required.');
-    }
-    if (!cleanEmail || !cleanEmail.includes('@')) {
-      throw new Error('Valid email address is required.');
-    }
-    if (!password || password.length < 6) {
-      throw new Error('Password must be at least 6 characters long.');
-    }
+    const res = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: cleanName, email: cleanEmail, password }),
+    });
 
-    // 1. Direct Supabase Registration if configured via env
-    const client = getSupabaseClient();
-    const config = getSupabaseConfig();
-    if (client && config.url && config.anonKey) {
-      const { data, error } = await client.auth.signUp({
-        email: cleanEmail,
-        password,
-        options: {
-          data: {
-            full_name: cleanName,
-            name: cleanName,
-          },
-        },
-      });
-
-      if (error) {
-        throw new Error(error.message || 'Registration failed.');
-      }
-
-      if (data.user) {
-        const authUser: AuthUser = {
-          id: data.user.id,
-          email: data.user.email || cleanEmail,
-          name: cleanName,
-          role: 'owner',
-          createdAt: data.user.created_at,
-        };
-
-        const sessionToken = data.session?.access_token || `token_sb_${Date.now()}`;
-        localStorage.setItem(TOKEN_KEY, sessionToken);
-        setToken(sessionToken);
-        setUser(authUser);
-
-        return {
-          success: true,
-          message: data.session
-            ? 'Account registered and signed in successfully.'
-            : 'Account registered. Please check your email for confirmation if required.',
-          user: authUser,
-        };
-      }
-    }
-
-    // 2. Backend API Registration
+    let data: any = {};
     try {
-      const res = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: cleanName, email: cleanEmail, password }),
-      });
-
-      const contentType = res.headers.get('content-type') || '';
-      if (contentType.includes('application/json')) {
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          throw new Error(data.error || 'Registration failed.');
-        }
-
-        if (data.token && data.user) {
-          localStorage.setItem(TOKEN_KEY, data.token);
-          setToken(data.token);
-          setUser(data.user);
-        }
-
-        return {
-          success: true,
-          message: data.message || 'Account registered successfully.',
-          user: data.user,
-        };
-      }
-
-      if (isStaticHostFallback(res, contentType)) {
-        const fallbackRes = clientRegister(cleanName, cleanEmail, password);
-        setToken(fallbackRes.token);
-        setUser(fallbackRes.user);
-        return fallbackRes;
-      }
-    } catch (err: any) {
-      if (
-        err.message &&
-        !err.message.includes('fetch') &&
-        !err.message.includes('NetworkError') &&
-        !err.message.includes('Failed to fetch')
-      ) {
-        throw err;
-      }
-      const fallbackRes = clientRegister(cleanName, cleanEmail, password);
-      setToken(fallbackRes.token);
-      setUser(fallbackRes.user);
-      return fallbackRes;
+      data = await res.json();
+    } catch {
+      data = { error: `Server error (${res.status})` };
     }
 
-    const fallbackRes = clientRegister(cleanName, cleanEmail, password);
-    setToken(fallbackRes.token);
-    setUser(fallbackRes.user);
-    return fallbackRes;
+    if (!res.ok) {
+      throw new Error(data.error || 'Registration failed.');
+    }
+
+    if (data.token && data.user) {
+      localStorage.setItem(TOKEN_KEY, data.token);
+      setToken(data.token);
+      setUser(data.user);
+    }
+
+    // Optional Supabase sync
+    const client = getSupabaseClient();
+    if (client && isLiveSupabase) {
+      client.auth.signUp({ email: cleanEmail, password, options: { data: { full_name: cleanName } } }).catch(() => {});
+    }
+
+    return {
+      success: true,
+      message: data.message || 'Account registered successfully.',
+      user: data.user,
+    };
   };
 
-  const forgotPassword = async (
-    email: string
-  ): Promise<{ success: boolean; message: string; resetCode?: string; resetToken?: string }> => {
+  const loginWithGoogle = async (
+    email: string,
+    name?: string
+  ): Promise<{ success: boolean; message: string; user?: AuthUser }> => {
     const cleanEmail = email.trim().toLowerCase();
-    if (!cleanEmail || !cleanEmail.includes('@')) {
-      throw new Error('A valid email address is required.');
-    }
+    const res = await fetch('/api/auth/google-login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: cleanEmail, name: name || cleanEmail.split('@')[0] }),
+    });
 
-    const client = getSupabaseClient();
-    const config = getSupabaseConfig();
-    if (client && config.url && config.anonKey) {
-      const { error } = await client.auth.resetPasswordForEmail(cleanEmail, {
-        redirectTo: window.location.origin,
-      });
-      if (error) {
-        throw new Error(error.message);
-      }
-      return {
-        success: true,
-        message: `Password reset instructions sent to ${cleanEmail}.`,
-      };
-    }
-
+    let data: any = {};
     try {
-      const res = await fetch('/api/auth/forgot-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: cleanEmail }),
-      });
-      const contentType = res.headers.get('content-type') || '';
-      if (contentType.includes('application/json')) {
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          throw new Error(data.error || 'Failed to process password reset.');
-        }
-        return {
-          success: true,
-          message: data.message || `Password reset instructions sent to ${cleanEmail}.`,
-          resetCode: data.resetCode,
-          resetToken: data.resetToken,
-        };
-      }
-    } catch (err: any) {
-      if (
-        err.message &&
-        !err.message.includes('fetch') &&
-        !err.message.includes('NetworkError') &&
-        !err.message.includes('Failed to fetch')
-      ) {
-        throw err;
-      }
+      data = await res.json();
+    } catch {
+      data = { error: `Server error (${res.status})` };
     }
 
-    return clientForgotPassword(cleanEmail);
+    if (!res.ok) {
+      throw new Error(data.error || 'Google sign-in failed.');
+    }
+
+    if (data.token && data.user) {
+      localStorage.setItem(TOKEN_KEY, data.token);
+      setToken(data.token);
+      setUser(data.user);
+    }
+
+    return {
+      success: true,
+      message: data.message || 'Signed in with Google successfully.',
+      user: data.user,
+    };
   };
 
-  const resetPassword = async (key: string, newPass: string): Promise<{ success: boolean; message: string }> => {
-    if (!key.trim()) {
-      throw new Error('Verification code or reset token is required.');
-    }
-    if (!newPass || newPass.length < 6) {
-      throw new Error('New password must be at least 6 characters long.');
-    }
+  const forgotPassword = async (email: string) => {
+    const cleanEmail = email.trim().toLowerCase();
+    const res = await fetch('/api/auth/forgot-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: cleanEmail }),
+    });
 
-    const client = getSupabaseClient();
-    const config = getSupabaseConfig();
-    if (client && config.url && config.anonKey) {
-      const { error } = await client.auth.updateUser({ password: newPass });
-      if (error) {
-        throw new Error(error.message);
-      }
-      return {
-        success: true,
-        message: 'Your account password has been updated. You can now sign in.',
-      };
-    }
-
+    let data: any = {};
     try {
-      const res = await fetch('/api/auth/reset-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ resetCode: key, resetToken: key, newPassword: newPass }),
-      });
-      const contentType = res.headers.get('content-type') || '';
-      if (contentType.includes('application/json')) {
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          throw new Error(data.error || 'Failed to update password.');
-        }
-        return {
-          success: true,
-          message: data.message || 'Password updated successfully.',
-        };
-      }
-    } catch (err: any) {
-      if (
-        err.message &&
-        !err.message.includes('fetch') &&
-        !err.message.includes('NetworkError') &&
-        !err.message.includes('Failed to fetch')
-      ) {
-        throw err;
-      }
+      data = await res.json();
+    } catch {
+      data = { error: `Server error (${res.status})` };
     }
 
-    return clientResetPassword(key, newPass);
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to generate reset request.');
+    }
+
+    return {
+      success: true,
+      message: data.message,
+      resetCode: data.resetCode,
+      resetToken: data.resetToken,
+    };
+  };
+
+  const resetPassword = async (key: string, newPassword: string) => {
+    const res = await fetch('/api/auth/reset-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resetCode: key, resetToken: key, newPassword }),
+    });
+
+    let data: any = {};
+    try {
+      data = await res.json();
+    } catch {
+      data = { error: `Server error (${res.status})` };
+    }
+
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to reset password.');
+    }
+
+    return {
+      success: true,
+      message: data.message,
+    };
   };
 
   const logout = async () => {
-    const activeToken = token || localStorage.getItem(TOKEN_KEY);
-
-    const client = getSupabaseClient();
-    if (client) {
-      try {
-        await client.auth.signOut();
-      } catch (err) {
-        console.warn('Supabase sign out note:', err);
-      }
+    const currentToken = token || localStorage.getItem(TOKEN_KEY);
+    if (currentToken) {
+      fetch('/api/auth/logout', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${currentToken}` },
+      }).catch(() => {});
     }
 
-    if (activeToken) {
+    const client = getSupabaseClient();
+    if (client && isLiveSupabase) {
       try {
-        await fetch('/api/auth/logout', {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${activeToken}` },
-        });
-      } catch {
+        await client.auth.signOut();
+      } catch (e) {
         // ignore
       }
     }
 
-    clientLogout();
     localStorage.removeItem(TOKEN_KEY);
-    setUser(null);
     setToken(null);
+    setUser(null);
   };
 
   const updateUser = (updates: Partial<AuthUser>) => {
-    if (!user) return;
-    const updated = { ...user, ...updates };
-    setUser(updated);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('domainguard_client_session_user', JSON.stringify(updated));
+    setUser((prev) => (prev ? { ...prev, ...updates } : null));
+  };
+
+  const configureSupabase = async (url: string, anonKey: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      saveSupabaseConfig(url.trim(), anonKey.trim());
+      setSupabaseUrl(url.trim());
+      setIsLiveSupabase(true);
+      const client = getSupabaseClient();
+      if (client) {
+        await client.auth.getSession();
+      }
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message };
     }
+  };
+
+  const resetSupabaseConfig = () => {
+    clearSupabaseConfig();
+    setIsLiveSupabase(false);
+    setSupabaseUrl('');
   };
 
   return (
@@ -536,12 +341,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         user,
         token,
         loading,
+        isLiveSupabase,
+        supabaseUrl,
         login,
         register,
+        loginWithGoogle,
         forgotPassword,
         resetPassword,
         logout,
         updateUser,
+        configureSupabase,
+        resetSupabaseConfig,
       }}
     >
       {children}

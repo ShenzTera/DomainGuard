@@ -250,112 +250,82 @@ export const INITIAL_NOTIFICATIONS: NotificationLog[] = [
   },
 ];
 
-// Storage helpers with per-user data isolation
-function getUserKey(baseKey: string, userId?: string | null): string {
-  if (!userId) return baseKey;
-  const cleanId = userId.replace(/[^a-zA-Z0-9_-]/g, '_');
-  return `${baseKey}_${cleanId}`;
-}
-
-export function loadDomains(userId?: string | null): DomainItem[] {
+// Storage helpers
+export function loadDomains(): DomainItem[] {
   if (typeof window === 'undefined') return INITIAL_DOMAINS;
-  const key = getUserKey(STORAGE_KEY_DOMAINS, userId);
-  const raw = localStorage.getItem(key);
+  const raw = localStorage.getItem(STORAGE_KEY_DOMAINS);
   if (!raw) {
-    // If it's a demo account or initial legacy store, initialize seeded portfolio
-    const isDemoOrAdmin = !userId || userId.includes('admin') || userId.includes('demo');
-    const initialList = isDemoOrAdmin ? INITIAL_DOMAINS : [];
-    saveDomains(initialList, userId);
-    return initialList;
+    saveDomains(INITIAL_DOMAINS);
+    return INITIAL_DOMAINS;
   }
   try {
     const list: DomainItem[] = JSON.parse(raw);
     return recalculateDaysUntilExpiration(list);
   } catch {
-    return [];
+    return INITIAL_DOMAINS;
   }
 }
 
-export function saveDomains(domains: DomainItem[], userId?: string | null): void {
+export function saveDomains(domains: DomainItem[]): void {
   if (typeof window === 'undefined') return;
-  const key = getUserKey(STORAGE_KEY_DOMAINS, userId);
-  localStorage.setItem(key, JSON.stringify(domains));
+  localStorage.setItem(STORAGE_KEY_DOMAINS, JSON.stringify(domains));
 }
 
-export function loadSettings(userId?: string | null, userEmail?: string | null): AlertSettings {
+export function loadSettings(): AlertSettings {
   if (typeof window === 'undefined') return INITIAL_SETTINGS;
-  const key = getUserKey(STORAGE_KEY_SETTINGS, userId);
-  const raw = localStorage.getItem(key);
-  const defaultEmail = userEmail || INITIAL_SETTINGS.alertEmail;
-  const defaultSettings: AlertSettings = {
-    ...INITIAL_SETTINGS,
-    alertEmail: defaultEmail,
-    alertEmails: [defaultEmail],
-  };
-
-  if (!raw) return defaultSettings;
+  const raw = localStorage.getItem(STORAGE_KEY_SETTINGS);
+  if (!raw) return INITIAL_SETTINGS;
   try {
     const parsed = JSON.parse(raw);
     const alertEmails: string[] = Array.isArray(parsed.alertEmails) && parsed.alertEmails.length > 0
       ? parsed.alertEmails
-      : (parsed.alertEmail ? [parsed.alertEmail] : [defaultEmail]);
+      : (parsed.alertEmail ? [parsed.alertEmail] : INITIAL_SETTINGS.alertEmails);
     return {
-      ...defaultSettings,
+      ...INITIAL_SETTINGS,
       ...parsed,
       alertEmails,
-      alertEmail: alertEmails[0] || defaultEmail,
+      alertEmail: alertEmails[0] || INITIAL_SETTINGS.alertEmail,
     };
   } catch {
-    return defaultSettings;
+    return INITIAL_SETTINGS;
   }
 }
 
-export function saveSettings(settings: AlertSettings, userId?: string | null): void {
+export function saveSettings(settings: AlertSettings): void {
   if (typeof window === 'undefined') return;
-  const key = getUserKey(STORAGE_KEY_SETTINGS, userId);
-  localStorage.setItem(key, JSON.stringify(settings));
+  localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(settings));
 }
 
-export function loadNotifications(userId?: string | null): NotificationLog[] {
+export function loadNotifications(): NotificationLog[] {
   if (typeof window === 'undefined') return INITIAL_NOTIFICATIONS;
-  const key = getUserKey(STORAGE_KEY_NOTIFS, userId);
-  const raw = localStorage.getItem(key);
-  if (!raw) {
-    const isDemoOrAdmin = !userId || userId.includes('admin') || userId.includes('demo');
-    return isDemoOrAdmin ? INITIAL_NOTIFICATIONS : [];
-  }
+  const raw = localStorage.getItem(STORAGE_KEY_NOTIFS);
+  if (!raw) return INITIAL_NOTIFICATIONS;
   try {
     return JSON.parse(raw);
   } catch {
-    return [];
+    return INITIAL_NOTIFICATIONS;
   }
 }
 
-export function saveNotifications(logs: NotificationLog[], userId?: string | null): void {
+export function saveNotifications(logs: NotificationLog[]): void {
   if (typeof window === 'undefined') return;
-  const key = getUserKey(STORAGE_KEY_NOTIFS, userId);
-  localStorage.setItem(key, JSON.stringify(logs));
+  localStorage.setItem(STORAGE_KEY_NOTIFS, JSON.stringify(logs));
 }
 
-export function loadTeam(userId?: string | null): TeamMember[] {
+export function loadTeam(): TeamMember[] {
   if (typeof window === 'undefined') return INITIAL_TEAM;
-  const key = getUserKey(STORAGE_KEY_TEAM, userId);
-  const raw = localStorage.getItem(key);
-  if (!raw) {
-    const isDemoOrAdmin = !userId || userId.includes('admin') || userId.includes('demo');
-    return isDemoOrAdmin ? INITIAL_TEAM : [];
-  }
+  const raw = localStorage.getItem(STORAGE_KEY_TEAM);
+  if (!raw) return INITIAL_TEAM;
   try {
     return JSON.parse(raw);
   } catch {
-    return [];
+    return INITIAL_TEAM;
   }
 }
 
-export function saveTeam(team: TeamMember[], userId?: string | null): void {
+export function saveTeam(team: TeamMember[]): void {
   if (typeof window === 'undefined') return;
-  const key = getUserKey(STORAGE_KEY_TEAM, userId);
-  localStorage.setItem(key, JSON.stringify(team));
+  localStorage.setItem(STORAGE_KEY_TEAM, JSON.stringify(team));
 }
 
 // Recalculate days remaining dynamically based on current date
@@ -418,53 +388,16 @@ export async function fetchDomainWhois(domain: string): Promise<any> {
 
 // Test / Send Telegram message
 export async function sendTelegramAlert(botToken: string, chatId: string, message?: string) {
-  try {
-    const res = await fetch('/api/telegram/test', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ botToken, chatId, message }),
-    });
-    const contentType = res.headers.get('content-type') || '';
-    if (contentType.includes('application/json')) {
-      const data = await res.json().catch(() => ({}));
-      if (res.ok && data.success) {
-        return data;
-      }
-      if (!res.ok && data.error && !data.error.includes('Server error')) {
-        throw new Error(data.error);
-      }
-    }
-  } catch (err: any) {
-    if (err.message && !err.message.includes('fetch') && !err.message.includes('Server error')) {
-      throw err;
-    }
+  const res = await fetch('/api/telegram/test', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ botToken, chatId, message }),
+  });
+  const data = await res.json();
+  if (!res.ok || !data.success) {
+    throw new Error(data.error || 'Telegram message failed');
   }
-
-  // Fallback: Direct Telegram Bot API call for static hosting (Cloudflare Pages)
-  const cleanToken = botToken.trim();
-  const cleanChatId = chatId.trim();
-  const text =
-    message ||
-    `🔔 <b>DomainGuard Test Alert</b>\n\nYour Telegram integration is verified and operational on Cloudflare Pages!`;
-
-  try {
-    const tgRes = await fetch(`https://api.telegram.org/bot${cleanToken}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: cleanChatId,
-        text,
-        parse_mode: 'HTML',
-      }),
-    });
-    const tgData = await tgRes.json().catch(() => ({}));
-    if (!tgRes.ok || !tgData.ok) {
-      throw new Error(tgData.description || 'Telegram Bot API rejected credentials.');
-    }
-    return { success: true, message: 'Telegram alert delivered directly via Telegram Bot API.' };
-  } catch (tgErr: any) {
-    throw new Error(tgErr.message || 'Failed to send Telegram message.');
-  }
+  return data;
 }
 
 // Dispatch automated domain expiration alerts to connected Telegram channel
@@ -475,67 +408,31 @@ export async function dispatchAutomatedAlerts(domains: any[], force = false) {
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  try {
-    const res = await fetch('/api/alerts/dispatch-automated', {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ domains, force }),
-    });
-    const contentType = res.headers.get('content-type') || '';
-    if (contentType.includes('application/json')) {
-      const data = await res.json().catch(() => ({}));
-      if (res.ok) {
-        return data;
-      }
-    }
-  } catch {
-    // Static hosting fallback
+  const res = await fetch('/api/alerts/dispatch-automated', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ domains, force }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error || 'Failed to dispatch automated alerts');
   }
-
-  // Fallback for static Cloudflare Pages hosting
-  const critical = domains.filter((d: any) => d.daysUntilExpiration <= 7);
-  return {
-    success: true,
-    sentCount: critical.length,
-    message: `Automated alert cycle completed (${critical.length} critical domain notifications processed).`,
-    dispatchedDomains: critical.map((d: any) => d.domain),
-  };
+  return data;
 }
 
 // Import Google Sheets CSV
 export async function fetchGoogleSheetCsv(sheetUrl: string): Promise<string> {
-  try {
-    const res = await fetch('/api/sheets/import', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sheetUrl }),
-    });
-    const contentType = res.headers.get('content-type') || '';
-    if (contentType.includes('application/json')) {
-      const data = await res.json().catch(() => ({}));
-      if (res.ok && data.success && data.csv) {
-        return data.csv;
-      }
-    }
-  } catch {
-    // Static hosting fallback
+  const res = await fetch('/api/sheets/import', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sheetUrl }),
+  });
+  const data = await res.json();
+  if (!res.ok || !data.success) {
+    throw new Error(data.error || 'Failed to import Google Sheet');
   }
-
-  // Client-side direct Google Sheets CSV export fallback
-  let exportUrl = sheetUrl.trim();
-  const match = sheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
-  if (match && match[1]) {
-    const sheetId = match[1];
-    exportUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv`;
-  }
-
-  const directRes = await fetch(exportUrl);
-  if (!directRes.ok) {
-    throw new Error('Could not access Google Sheet. Please verify it is published to web or set to "Anyone with the link can view".');
-  }
-  return await directRes.text();
+  return data.csv;
 }
-
 
 // Parse CSV text into domains
 export function parseDomainsFromCsv(csvText: string): Array<Partial<DomainItem>> {
