@@ -88,6 +88,7 @@ export const AlertsSettingsView: React.FC<AlertsSettingsViewProps> = ({
   // Manual Chat ID fallback accordion (for Telegram Groups / Channels)
   const [showManualChatId, setShowManualChatId] = useState(false);
   const [manualChatIdInput, setManualChatIdInput] = useState(formData.telegramChatId || '');
+  const [showCloudflareGuide, setShowCloudflareGuide] = useState(false);
   const [isSavingManualChatId, setIsSavingManualChatId] = useState(false);
 
   // Email test status
@@ -109,9 +110,11 @@ export const AlertsSettingsView: React.FC<AlertsSettingsViewProps> = ({
 
       // 1. Try server endpoint
       try {
-        const res = await fetch('/api/telegram/available-chats', {
+        const query = savedBotToken ? `?botToken=${encodeURIComponent(savedBotToken)}` : '';
+        const res = await fetch(`/api/telegram/available-chats${query}`, {
           headers: {
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            ...(savedBotToken ? { 'x-bot-token': savedBotToken } : {}),
           },
         });
         const contentType = res.headers.get('content-type') || '';
@@ -178,7 +181,10 @@ export const AlertsSettingsView: React.FC<AlertsSettingsViewProps> = ({
     async function checkBotInfo() {
       const savedBotToken = localStorage.getItem('domainguard_telegram_bot_token') || '';
       try {
-        const res = await fetch('/api/telegram/bot-info');
+        const query = savedBotToken ? `?botToken=${encodeURIComponent(savedBotToken)}` : '';
+        const res = await fetch(`/api/telegram/bot-info${query}`, {
+          headers: savedBotToken ? { 'x-bot-token': savedBotToken } : {},
+        });
         const contentType = res.headers.get('content-type') || '';
         if (contentType.includes('application/json')) {
           const data = await res.json().catch(() => ({}));
@@ -330,19 +336,21 @@ export const AlertsSettingsView: React.FC<AlertsSettingsViewProps> = ({
     setTelegramStatus(null);
     try {
       const token = localStorage.getItem('domainguard_auth_token');
+      const savedBotToken = localStorage.getItem('domainguard_telegram_bot_token') || '';
       const res = await fetch('/api/telegram/start-connect', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...(savedBotToken ? { 'x-bot-token': savedBotToken } : {}),
         },
-        body: JSON.stringify({ userId: user?.id }),
+        body: JSON.stringify({ userId: user?.id, botToken: savedBotToken }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
 
-      setConnectCode(data.verificationCode);
-      setConnectDeepLink(data.deepLink);
+      setConnectCode(data.verificationCode || data.connectCode);
+      setConnectDeepLink(data.deepLink || data.connectUrl);
       setConnectGroupDeepLink(data.groupDeepLink);
       if (data.botUsername) setBotUsername(data.botUsername);
       fetchAvailableChats();
@@ -362,16 +370,20 @@ export const AlertsSettingsView: React.FC<AlertsSettingsViewProps> = ({
     setTelegramStatus(null);
     try {
       const token = localStorage.getItem('domainguard_auth_token');
+      const savedBotToken = localStorage.getItem('domainguard_telegram_bot_token') || '';
       const res = await fetch('/api/telegram/select-chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...(savedBotToken ? { 'x-bot-token': savedBotToken } : {}),
         },
         body: JSON.stringify({
           chatId,
           title,
+          chatTitle: title,
           userId: user?.id,
+          botToken: savedBotToken,
         }),
       });
       const data = await res.json();
@@ -422,13 +434,20 @@ export const AlertsSettingsView: React.FC<AlertsSettingsViewProps> = ({
     setTelegramStatus(null);
     try {
       const token = localStorage.getItem('domainguard_auth_token');
+      const savedBotToken = localStorage.getItem('domainguard_telegram_bot_token') || '';
       const res = await fetch('/api/telegram/verify-status', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...(savedBotToken ? { 'x-bot-token': savedBotToken } : {}),
         },
-        body: JSON.stringify({ userId: user?.id }),
+        body: JSON.stringify({
+          userId: user?.id,
+          connectCode: connectCode || '',
+          verificationCode: connectCode || '',
+          botToken: savedBotToken,
+        }),
       });
       const data = await res.json();
 
@@ -942,6 +961,56 @@ export const AlertsSettingsView: React.FC<AlertsSettingsViewProps> = ({
           <span>{saveFeedback}</span>
         </div>
       )}
+
+      {/* Cloudflare Pages Hosting & Notification Diagnostics Panel */}
+      <div className="rounded-lg border border-sky-200 dark:border-sky-900/60 bg-sky-50/50 dark:bg-sky-950/20 p-4 sm:p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
+            <div>
+              <h3 className="text-sm font-bold text-neutral-900 dark:text-white flex items-center gap-2">
+                Cloudflare Pages Deployment & Notification Engine
+                <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-sky-100 dark:bg-sky-900/50 text-sky-800 dark:text-sky-300 font-semibold">
+                  Edge Functions Active
+                </span>
+              </h3>
+              <p className="text-xs text-neutral-600 dark:text-neutral-400 mt-0.5">
+                Hosting through GitHub on Cloudflare Pages? Follow these 3 essential steps to enable live Telegram & email delivery:
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowCloudflareGuide(!showCloudflareGuide)}
+            className="text-xs font-semibold text-sky-700 dark:text-sky-300 hover:underline shrink-0"
+          >
+            {showCloudflareGuide ? 'Hide Cloudflare Guide' : 'View Setup Guide'}
+          </button>
+        </div>
+
+        {showCloudflareGuide && (
+          <div className="mt-4 pt-4 border-t border-sky-200/70 dark:border-sky-900/40 grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+            <div className="p-3 rounded bg-white dark:bg-neutral-900 border border-sky-100 dark:border-sky-900/40 space-y-1.5">
+              <span className="font-bold text-neutral-900 dark:text-white block">1. Telegram Bot Token</span>
+              <p className="text-neutral-600 dark:text-neutral-400 leading-relaxed">
+                Cloudflare Pages does not copy local <code>.env</code> files from GitHub. Enter your bot token below in <strong>"Configure Bot Token"</strong> (or add <code>TELEGRAM_BOT_TOKEN</code> in Cloudflare Dashboard → Settings → Environment Variables).
+              </p>
+            </div>
+            <div className="p-3 rounded bg-white dark:bg-neutral-900 border border-sky-100 dark:border-sky-900/40 space-y-1.5">
+              <span className="font-bold text-neutral-900 dark:text-white block">2. Telegram Chat Activation</span>
+              <p className="text-neutral-600 dark:text-neutral-400 leading-relaxed">
+                Telegram’s security policy requires users or groups to initiate contact first. Always open your bot on Telegram and tap <strong>START</strong> (or add the bot to your group and send a message) before verifying.
+              </p>
+            </div>
+            <div className="p-3 rounded bg-white dark:bg-neutral-900 border border-sky-100 dark:border-sky-900/40 space-y-1.5">
+              <span className="font-bold text-neutral-900 dark:text-white block">3. Live Gmail Delivery</span>
+              <p className="text-neutral-600 dark:text-neutral-400 leading-relaxed">
+                For delivery directly into Gmail/corporate inboxes, paste a free Resend API key (100 free emails/day from <a href="https://resend.com" target="_blank" rel="noreferrer" className="underline font-semibold">resend.com</a>). Without an API key, alerts are recorded in your in-app audit log.
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Main Settings Form */}
       <form onSubmit={handleSave} className="space-y-7">

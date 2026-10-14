@@ -6,7 +6,8 @@ export async function onRequestPost(context: any) {
     const chatId = (body.chatId || '').trim();
     const userId = body.userId;
     const username = (body.username || '').trim() || (chatId.startsWith('-') ? 'Telegram Group' : 'Telegram User');
-    const customToken = (body.botToken || '').trim() || (env?.TELEGRAM_BOT_TOKEN || '').trim();
+    const headerToken = request.headers.get('x-bot-token') || '';
+    const customToken = (body.botToken || headerToken || env?.TELEGRAM_BOT_TOKEN || '').trim();
 
     if (!chatId) {
       return new Response(JSON.stringify({ error: 'Chat ID is required.' }), {

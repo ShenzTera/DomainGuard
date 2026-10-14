@@ -19,7 +19,9 @@ export async function onRequestPost(context: any) {
     // Normalize recipient addresses
     let recipients: string[] = [];
     if (Array.isArray(toEmails) && toEmails.length > 0) {
-      recipients = toEmails.map((e: string) => String(e).trim().toLowerCase()).filter((e: string) => e.includes('@'));
+      recipients = toEmails
+        .map((e: string) => String(e).trim().toLowerCase())
+        .filter((e: string) => e.includes('@'));
     } else if (typeof toEmail === 'string' && toEmail.includes('@')) {
       recipients = [toEmail.trim().toLowerCase()];
     }
@@ -38,9 +40,10 @@ export async function onRequestPost(context: any) {
     }
 
     const alertSubject = subject || `⚠️ DomainGuard Expiration Alert (${urgency || 'Priority Warning'})`;
-    const domainListText = Array.isArray(domains) && domains.length > 0
-      ? domains.join(', ')
-      : 'Monitored Domain Portfolio';
+    const domainListText =
+      Array.isArray(domains) && domains.length > 0
+        ? domains.join(', ')
+        : 'Monitored Domain Portfolio';
 
     const htmlContent = `
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e5e7eb; border-radius: 8px; background-color: #ffffff;">
@@ -66,8 +69,10 @@ export async function onRequestPost(context: any) {
       </div>
     `;
 
-    // 1. Live transactional delivery via Resend if API key is provided
-    const activeResendKey = (emailApiKey || '').trim() || (env?.RESEND_API_KEY || '').trim();
+    // 1. Live transactional delivery via Resend (https://resend.com)
+    const headerApiKey = request.headers.get('x-email-api-key') || '';
+    const activeResendKey = (emailApiKey || headerApiKey || env?.RESEND_API_KEY || '').trim();
+
     if (activeResendKey && (activeResendKey.startsWith('re_') || emailProvider === 'resend')) {
       try {
         const fromAddress = senderEmail || 'DomainGuard Alerts <onboarding@resend.dev>';
@@ -86,13 +91,15 @@ export async function onRequestPost(context: any) {
         });
 
         const resendData: any = await resendRes.json().catch(() => ({}));
+
         if (resendRes.ok) {
           return new Response(
             JSON.stringify({
               success: true,
+              liveDelivered: true,
               provider: 'Resend Live Email API',
               recipients,
-              message: `Live email alert delivered directly to ${recipients.length} address(es): ${recipients.join(', ')}.`,
+              message: `Live email alert delivered directly to ${recipients.length} inbox(es): ${recipients.join(', ')}.`,
               resendId: resendData.id,
             }),
             {
@@ -103,9 +110,18 @@ export async function onRequestPost(context: any) {
             }
           );
         } else {
+          let errorMsg = resendData.message || 'Resend rejected email dispatch.';
+          if (errorMsg.includes('only send testing emails to your own email address')) {
+            errorMsg = `Resend Free Tier Restriction: You can currently only send test emails to your registered Resend account address. To send to other addresses (${recipients.join(', ')}), add and verify your custom domain in Resend (resend.com/domains).`;
+          } else if (errorMsg.includes('API key is invalid') || resendRes.status === 401) {
+            errorMsg = 'Invalid Resend API Key. Please get a free API key from https://resend.com/api-keys';
+          }
+
           return new Response(
             JSON.stringify({
-              error: resendData.message || 'Resend rejected the request. Please verify your Resend API key and verified domain.',
+              error: errorMsg,
+              provider: 'Resend',
+              statusCode: resendRes.status,
             }),
             {
               status: 400,
@@ -130,14 +146,15 @@ export async function onRequestPost(context: any) {
       }
     }
 
-    // 2. Verified In-App Gateway Delivery
+    // 2. In-App Notification Gateway (When no third-party email API key configured)
     return new Response(
       JSON.stringify({
         success: true,
+        liveDelivered: false,
         simulated: true,
-        provider: 'DomainGuard Notification Gateway',
+        provider: 'DomainGuard In-App Gateway',
         recipients,
-        message: `Alert dispatched to ${recipients.length} recipient address(es): ${recipients.join(', ')}. (Tip: Add a free Resend API key from resend.com for live direct-to-inbox delivery).`,
+        message: `Alert recorded for ${recipients.length} address(es): ${recipients.join(', ')}. To deliver directly to real Gmail inboxes, add a free Resend API key in Settings (or set RESEND_API_KEY in Cloudflare Pages environment variables).`,
       }),
       {
         headers: {
@@ -165,7 +182,7 @@ export async function onRequestOptions() {
     headers: {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-email-api-key',
     },
   });
 }

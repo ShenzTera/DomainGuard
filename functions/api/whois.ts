@@ -1,5 +1,5 @@
 // Cloudflare Pages Edge Function: /api/whois
-// Real-time authoritative domain expiration and registrar resolver via official IANA RDAP Bootstrap & Registries
+// Real-time authoritative domain expiration and registrar resolver via official IANA RDAP Bootstrap & Direct Registries
 
 let ianaBootstrapCache: any = null;
 
@@ -114,16 +114,32 @@ export async function onRequestGet(context: any) {
 
     // 2. Official IANA Direct Registry RDAP (100% Free, Official, No Keys, No Captchas)
     try {
-      const bootstrap = await getIanaBootstrap();
-      const service = bootstrap?.services?.find((s: any) => s[0].includes(tld));
-      let rdapBaseUrl = service?.[1]?.[0] ? service[1][0].replace(/\/+$/, '') : null;
+      let rdapBaseUrl: string | null = null;
 
-      // Well-known registry RDAP endpoints if bootstrap lookup is empty
+      // Direct registry routing for fastest response & high accuracy
+      if (tld === 'com' || tld === 'net') {
+        rdapBaseUrl = 'https://rdap.verisign.com/com/v1';
+      } else if (tld === 'org') {
+        rdapBaseUrl = 'https://rdap.publicinterestregistry.org/rdap';
+      } else if (['app', 'dev', 'page', 'how', 'soy', 'channel'].includes(tld)) {
+        rdapBaseUrl = 'https://pubapi.registry.google/rdap';
+      } else if (['io', 'sh', 'ac', 'info', 'mobi', 'pro', 'live', 'news', 'studio', 'agency'].includes(tld)) {
+        rdapBaseUrl = 'https://rdap.identitydigital.services/rdap';
+      } else if (['xyz', 'club', 'design', 'icu', 'wiki', 'art'].includes(tld)) {
+        rdapBaseUrl = 'https://rdap.centralnic.com/xyz';
+      } else if (['tech', 'store', 'online', 'site', 'space', 'website', 'fun', 'host', 'press'].includes(tld)) {
+        rdapBaseUrl = 'https://rdap.radix.host/rdap';
+      } else if (['in'].includes(tld)) {
+        rdapBaseUrl = 'https://rdap.nixiregistry.in/rdap';
+      }
+
+      // If not in static fast-list, query IANA bootstrap dns.json
       if (!rdapBaseUrl) {
-        if (tld === 'com' || tld === 'net') rdapBaseUrl = 'https://rdap.verisign.com/com/v1';
-        else if (tld === 'org') rdapBaseUrl = 'https://rdap.publicinterestregistry.org/rdap';
-        else if (tld === 'app' || tld === 'dev' || tld === 'page') rdapBaseUrl = 'https://pubapi.registry.google/rdap';
-        else if (tld === 'io' || tld === 'sh' || tld === 'info' || tld === 'mobi') rdapBaseUrl = 'https://rdap.identitydigital.services/rdap';
+        const bootstrap = await getIanaBootstrap();
+        const service = bootstrap?.services?.find((s: any) => s[0].includes(tld));
+        if (service?.[1]?.[0]) {
+          rdapBaseUrl = service[1][0].replace(/\/+$/, '');
+        }
       }
 
       if (rdapBaseUrl) {
@@ -151,7 +167,7 @@ export async function onRequestGet(context: any) {
               nameservers: [],
               dnsIps: [],
               rawStatus: ['Available for registration'],
-              whoisSource: 'ICANN IANA Official RDAP (404 Not Found)',
+              whoisSource: 'ICANN Official Registry RDAP (Available)',
             }),
             {
               headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
@@ -161,7 +177,12 @@ export async function onRequestGet(context: any) {
 
         if (rdapRes.ok) {
           const data: any = await rdapRes.json();
-          const expEvent = data.events?.find((e: any) => e.eventAction === 'expiration');
+          const expEvent = data.events?.find(
+            (e: any) =>
+              e.eventAction === 'expiration' ||
+              e.eventAction === 'registration expiration' ||
+              e.eventAction === 'renew'
+          );
           const regEvent = data.events?.find((e: any) => e.eventAction === 'registration');
           const updEvent = data.events?.find((e: any) => e.eventAction === 'last changed' || e.eventAction === 'last update');
 
@@ -213,7 +234,7 @@ export async function onRequestGet(context: any) {
                 daysUntilExpiration,
                 nameservers: rdapNs,
                 dnsIps: ['104.21.19.4', '172.67.140.2'],
-                rawStatus: Array.isArray(data.status) ? data.status : ['active', 'clientTransferProhibited'],
+                rawStatus: Array.isArray(data.status) ? data.status : ['active'],
                 whoisSource: 'ICANN IANA Official RDAP',
               }),
               {
@@ -224,26 +245,46 @@ export async function onRequestGet(context: any) {
         }
       }
     } catch {
-      // Continue to edge resolution fallback
+      // Continue to DNS fallback
     }
 
-    // 3. Fallback when upstream is unreachable
+    // 3. Fallback when RDAP registry does not expose public RDAP (e.g. ccTLD without public RDAP)
+    // Check DNS resolution via Cloudflare DoH (1.1.1.1)
+    let isResolving = true;
+    let nameservers = ['ns1.cloudflare.com', 'ns2.cloudflare.com'];
+    try {
+      const dohRes = await fetch(`https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(domain)}&type=NS`, {
+        headers: { 'Accept': 'application/dns-json' },
+      });
+      if (dohRes.ok) {
+        const dohData: any = await dohRes.json();
+        if (dohData.Status === 3) {
+          // NXDOMAIN -> available
+          isResolving = false;
+        } else if (Array.isArray(dohData.Answer) && dohData.Answer.length > 0) {
+          nameservers = dohData.Answer.map((a: any) => a.data?.replace(/\.$/, '')).filter(Boolean);
+        }
+      }
+    } catch {
+      // Keep defaults
+    }
+
     return new Response(
       JSON.stringify({
         domain,
-        isAvailable: false,
-        workingStatus: 'active',
-        isResolving: true,
+        isAvailable: !isResolving,
+        workingStatus: isResolving ? 'active' : 'available',
+        isResolving,
         registrar: 'ICANN Accredited Registrar',
         registrarPortalUrl: `https://www.google.com/search?q=${encodeURIComponent(domain + ' renewal portal')}`,
         company: `${domain.split('.')[0].toUpperCase()} Organization`,
         expirationDate: null,
         registrationDate: null,
         daysUntilExpiration: null,
-        nameservers: ['ns1.cloudflare.com', 'ns2.cloudflare.com'],
+        nameservers,
         dnsIps: ['104.21.19.4', '172.67.140.2'],
-        rawStatus: ['Active DNS Resolution'],
-        whoisSource: 'DNS Authority (Edge)',
+        rawStatus: isResolving ? ['Active DNS Resolution'] : ['Unassigned / Available'],
+        whoisSource: isResolving ? 'DNS Authority (Edge Verification)' : 'DNS Root (Available)',
       }),
       {
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
@@ -252,7 +293,7 @@ export async function onRequestGet(context: any) {
   } catch (err: any) {
     return new Response(JSON.stringify({ error: err.message || 'WHOIS lookup failed' }), {
       status: 500,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
     });
   }
 }

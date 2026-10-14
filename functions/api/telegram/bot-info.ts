@@ -1,15 +1,18 @@
 // Cloudflare Pages Edge Function: /api/telegram/bot-info
 export async function onRequestGet(context: any) {
   try {
-    const { env } = context;
-    const botToken = (env?.TELEGRAM_BOT_TOKEN || '').trim();
+    const { request, env } = context;
+    const url = new URL(request.url);
+    const queryToken = url.searchParams.get('botToken') || '';
+    const headerToken = request.headers.get('x-bot-token') || '';
+    const botToken = (queryToken || headerToken || env?.TELEGRAM_BOT_TOKEN || '').trim();
 
     if (!botToken) {
       return new Response(
         JSON.stringify({
           configured: false,
           botUsername: null,
-          message: 'Telegram Bot Token not configured in Cloudflare environment.',
+          message: 'Telegram Bot Token not configured. Enter your bot token in settings or set TELEGRAM_BOT_TOKEN in Cloudflare environment variables.',
         }),
         {
           headers: {
@@ -43,12 +46,12 @@ export async function onRequestGet(context: any) {
       JSON.stringify({
         configured: false,
         botUsername: null,
-        message: 'Bot token rejected by Telegram API.',
+        message: meData.description || 'Bot token rejected by Telegram API. Verify token from @BotFather.',
       }),
       {
         headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
         },
       }
     );
@@ -71,7 +74,7 @@ export async function onRequestOptions() {
     headers: {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-bot-token',
     },
   });
 }

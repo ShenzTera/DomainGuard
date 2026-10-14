@@ -1,8 +1,11 @@
 // Cloudflare Pages Edge Function: /api/telegram/available-chats
 export async function onRequestGet(context: any) {
   try {
-    const { env } = context;
-    const botToken = (env?.TELEGRAM_BOT_TOKEN || '').trim();
+    const { request, env } = context;
+    const url = new URL(request.url);
+    const queryToken = url.searchParams.get('botToken') || '';
+    const headerToken = request.headers.get('x-bot-token') || '';
+    const botToken = (queryToken || headerToken || env?.TELEGRAM_BOT_TOKEN || '').trim();
 
     if (!botToken) {
       return new Response(JSON.stringify({ chats: [] }), {
@@ -13,7 +16,7 @@ export async function onRequestGet(context: any) {
       });
     }
 
-    const updatesRes = await fetch(`https://api.telegram.org/bot${botToken}/getUpdates?limit=20`);
+    const updatesRes = await fetch(`https://api.telegram.org/bot${botToken}/getUpdates?limit=50`);
     const updatesData: any = await updatesRes.json().catch(() => ({}));
 
     const chatsMap = new Map<string, any>();
@@ -23,11 +26,18 @@ export async function onRequestGet(context: any) {
         const chat = msg?.chat;
         if (chat && chat.id) {
           const id = String(chat.id);
-          const title = chat.title || [chat.first_name, chat.last_name].filter(Boolean).join(' ') || chat.username || 'Direct Chat';
+          const title =
+            chat.title ||
+            [chat.first_name, chat.last_name].filter(Boolean).join(' ') ||
+            chat.username ||
+            'Direct Chat';
           chatsMap.set(id, {
             id,
             title,
-            type: chat.type === 'supergroup' || chat.type === 'group' || chat.type === 'channel' ? 'group' : 'direct',
+            type:
+              chat.type === 'supergroup' || chat.type === 'group' || chat.type === 'channel'
+                ? 'group'
+                : 'direct',
             isCurrent: false,
           });
         }
@@ -60,7 +70,7 @@ export async function onRequestOptions() {
     headers: {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-bot-token',
     },
   });
 }
