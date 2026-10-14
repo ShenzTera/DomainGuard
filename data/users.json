@@ -1,0 +1,60 @@
+[
+  {
+    "id": "usr_admin_default",
+    "email": "admin@domainguard.io",
+    "name": "Admin Lead",
+    "passwordHash": "d924f30ae6ac5c27344a031d7d30d05e3f612d7bd81791e6647aefa1eb1a71af6ffa4b144622e792222f0250303987bc18dd661b02f41f6958cdc336e7781bd6",
+    "salt": "690461ffe5ea09c73801cd854c99baa3",
+    "role": "owner",
+    "createdAt": "2026-10-12T10:47:14.575Z"
+  },
+  {
+    "id": "usr_demo_default",
+    "email": "demo@domainguard.io",
+    "name": "Demo Engineer",
+    "passwordHash": "f01e2122d4948d3c58aa15f226323dfd543db3e04f00e6184d8802bdb1021d1aa9628dd13322d8709a6b4968c7909e9ce7e5368872ac2d13c8ace0aef1b0b620",
+    "salt": "2c72354d1c3647a3dae432b3ce16e0db",
+    "role": "admin",
+    "createdAt": "2026-10-12T10:47:14.637Z"
+  },
+  {
+    "id": "usr_1791802042751_4edb9262",
+    "email": "test@example.com",
+    "name": "Tester",
+    "passwordHash": "0a25b03f3802a67a20b0015b926aa84c74544fb9ad57205d23b5f9908dfde0dfe2322218feb282290a6d19273f3c282a027d10c424abc9f64e642e6cf2bdde60",
+    "salt": "2c5bcac3524c652ccea34b5fcc9ec808",
+    "role": "admin",
+    "createdAt": "2026-10-12T10:47:22.752Z"
+  },
+  {
+    "id": "usr_1791802809788_f345a318",
+    "email": "alex@enterprise.com",
+    "name": "Alex Morgan",
+    "passwordHash": "6b67dffda112fee4b2db7835e3e0480a7a657fdf3ee9dc0e5e8731f00edf8308075caa33849891ede36ec7248da8fb4a551a97c706d7a20c542a063449cd491b",
+    "salt": "77e3b11004797325e2cd16763c31ea2c",
+    "role": "admin",
+    "createdAt": "2026-10-12T11:00:09.788Z"
+  },
+  {
+    "id": "usr_google_1791802809989_818222f7",
+    "email": "shenz.terra@gmail.com",
+    "name": "Shenz Terra",
+    "passwordHash": "051ca24d5f048aa991e74e3d8fcf7d6ce470156f47a6a2783570a7d0eafda56c8ec3571160d62b84d8c4e5cdbc11edcff8b24d3a103159b6cffafd8460abb449",
+    "salt": "4b1a684537f9f6891fa24abb038d9907",
+    "role": "admin",
+    "createdAt": "2026-10-12T11:00:09.989Z",
+    "telegramChatId": "-4835124728",
+    "telegramUsername": "Domain test gc"
+  },
+  {
+    "id": "usr_1791802952191_7db380a3",
+    "email": "shenznazeer@gmail.com",
+    "name": "Shenz Nazeer",
+    "passwordHash": "3529d94051747608103e184694914377d72105235389f54f49f61ce715d15165623f75c1310ac7e4053e6f35949ea4b0f57a72be34d0282d9e587ae7abfadf34",
+    "salt": "f32399af71ce23676e30a2c2ace49c25",
+    "role": "admin",
+    "createdAt": "2026-10-12T11:02:32.191Z",
+    "telegramChatId": "-4835124728",
+    "telegramUsername": "Domain test gc"
+  }
+]

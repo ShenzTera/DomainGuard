@@ -1,0 +1,25 @@
+{
+  "telegramBotToken": "8886229592:AAERlc8V3rvKiniw25bVSTPOIa8ba_V4ehY",
+  "defaultTelegramChatId": "-4835124728",
+  "defaultTelegramUsername": "Domain test gc",
+  "knownChats": [
+    {
+      "id": "-4835124728",
+      "title": "Domain test gc",
+      "type": "group",
+      "lastSeen": "2026-10-12T11:27:23.831Z"
+    },
+    {
+      "id": "6638765506",
+      "title": "Shenz Nazeer",
+      "type": "private",
+      "lastSeen": "2026-10-12T11:27:23.831Z"
+    },
+    {
+      "id": "2064986898",
+      "title": "Connected Chat",
+      "type": "private",
+      "lastSeen": "2026-10-12T11:21:01.673Z"
+    }
+  ]
+}
