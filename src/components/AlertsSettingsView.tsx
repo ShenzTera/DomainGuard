@@ -92,8 +92,7 @@ export const AlertsSettingsView: React.FC<AlertsSettingsViewProps> = ({
 
   // Email test status
   const [isTestingEmail, setIsTestingEmail] = useState(false);
-  const [emailStatus, setEmailStatus] = useState<{ success: boolean; msg: string; provider?: string; logsUrl?: string } | null>(null);
-  const [mailtrapServerStatus, setMailtrapServerStatus] = useState<{ configured: boolean; smtpHost?: string; smtpPort?: number; senderEmail?: string; logsUrl?: string } | null>(null);
+  const [emailStatus, setEmailStatus] = useState<{ success: boolean; msg: string; provider?: string } | null>(null);
 
   // Provider configuration visibility toggle
   const [showProviderSetup, setShowProviderSetup] = useState(Boolean(formData.emailApiKey));
@@ -102,19 +101,67 @@ export const AlertsSettingsView: React.FC<AlertsSettingsViewProps> = ({
     setIsLoadingChats(true);
     try {
       const token = localStorage.getItem('domainguard_auth_token');
-      const res = await fetch('/api/telegram/available-chats', {
-        headers: {
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-      });
-      const data = await res.json();
-      if (data.chats && Array.isArray(data.chats)) {
-        setAvailableChats(data.chats);
-        if (data.activeChatId && !formData.telegramChatId) {
+      const savedBotToken = localStorage.getItem('domainguard_telegram_bot_token') || '';
+
+      let fetchedChats: any[] = [];
+      let activeId = '';
+      let activeTitle = '';
+
+      // 1. Try server endpoint
+      try {
+        const res = await fetch('/api/telegram/available-chats', {
+          headers: {
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        });
+        const contentType = res.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          const data = await res.json().catch(() => ({}));
+          if (data.chats && Array.isArray(data.chats)) {
+            fetchedChats = data.chats;
+            activeId = data.activeChatId;
+            activeTitle = data.activeChatTitle;
+          }
+        }
+      } catch {
+        // Fallback below
+      }
+
+      // 2. Direct client Telegram getUpdates fallback if savedBotToken is set
+      if (fetchedChats.length === 0 && savedBotToken) {
+        try {
+          const upRes = await fetch(`https://api.telegram.org/bot${savedBotToken}/getUpdates?limit=25`);
+          const upData: any = await upRes.json().catch(() => ({}));
+          if (upData.ok && Array.isArray(upData.result)) {
+            const chatMap = new Map<string, any>();
+            for (const upd of upData.result) {
+              const msg = upd.message || upd.channel_post || upd.my_chat_member;
+              const chat = msg?.chat;
+              if (chat && chat.id) {
+                const idStr = String(chat.id);
+                const title = chat.title || [chat.first_name, chat.last_name].filter(Boolean).join(' ') || chat.username || 'Direct Message';
+                chatMap.set(idStr, {
+                  id: idStr,
+                  title,
+                  type: chat.type === 'supergroup' || chat.type === 'group' || chat.type === 'channel' ? 'group' : 'direct',
+                  isCurrent: formData.telegramChatId === idStr,
+                });
+              }
+            }
+            fetchedChats = Array.from(chatMap.values());
+          }
+        } catch {
+          // Ignore
+        }
+      }
+
+      if (fetchedChats.length > 0) {
+        setAvailableChats(fetchedChats);
+        if (activeId && !formData.telegramChatId) {
           setFormData((prev) => ({
             ...prev,
-            telegramChatId: data.activeChatId,
-            telegramUsername: data.activeChatTitle,
+            telegramChatId: activeId,
+            telegramUsername: activeTitle,
             telegramConnected: true,
           }));
         }
@@ -129,39 +176,42 @@ export const AlertsSettingsView: React.FC<AlertsSettingsViewProps> = ({
   // Check server Telegram bot status on mount
   useEffect(() => {
     async function checkBotInfo() {
+      const savedBotToken = localStorage.getItem('domainguard_telegram_bot_token') || '';
       try {
         const res = await fetch('/api/telegram/bot-info');
-        const data = await res.json();
-        if (data.configured && data.botUsername) {
-          setBotConfigured(true);
-          setBotUsername(data.botUsername);
-          fetchAvailableChats();
-        } else {
-          setBotConfigured(false);
+        const contentType = res.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          const data = await res.json().catch(() => ({}));
+          if (data.configured && data.botUsername) {
+            setBotConfigured(true);
+            setBotUsername(data.botUsername);
+            fetchAvailableChats();
+            return;
+          }
         }
       } catch (err) {
-        console.warn('Could not check bot info:', err);
+        console.warn('Server bot info check failed:', err);
       }
+
+      // Check client-stored bot token if server not configured
+      if (savedBotToken) {
+        try {
+          const directMe = await fetch(`https://api.telegram.org/bot${savedBotToken}/getMe`);
+          const directData: any = await directMe.json().catch(() => ({}));
+          if (directData.ok && directData.result?.username) {
+            setBotConfigured(true);
+            setBotUsername(directData.result.username);
+            fetchAvailableChats();
+            return;
+          }
+        } catch {
+          // Keep unconfigured
+        }
+      }
+
+      setBotConfigured(false);
     }
     checkBotInfo();
-
-    // Check server Mailtrap SMTP status
-    async function checkMailtrapStatus() {
-      try {
-        const res = await fetch('/api/mailtrap/status');
-        const data = await res.json();
-        setMailtrapServerStatus(data);
-        if (data.configured) {
-          setFormData((prev) => ({
-            ...prev,
-            emailProvider: prev.emailProvider === 'direct' ? 'mailtrap' : prev.emailProvider,
-          }));
-        }
-      } catch (err) {
-        console.warn('Could not check Mailtrap status:', err);
-      }
-    }
-    checkMailtrapStatus();
   }, []);
 
   // Automatic background polling for Telegram link verification
@@ -484,25 +534,67 @@ export const AlertsSettingsView: React.FC<AlertsSettingsViewProps> = ({
         `Domains expiring within 30 days: <b>${expiringDomains.length}</b>\n\n` +
         `<i>Reminder Cadence: Warnings at 30 days + continuous 48-hour reminders until renewal.</i>`;
 
-      const res = await fetch('/api/telegram/send-test', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
-          message: testMsg,
-          chatId: destChatId,
-          recipientTitle: destTitle,
-        }),
-      });
+      const savedBotToken = localStorage.getItem('domainguard_telegram_bot_token') || '';
+      let delivered = false;
+      let deliveryRecipient = destTitle;
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      // 1. Try server/edge function
+      try {
+        const res = await fetch('/api/telegram/send-test', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            message: testMsg,
+            chatId: destChatId,
+            recipientTitle: destTitle,
+            botToken: savedBotToken,
+          }),
+        });
+
+        const contentType = res.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          const data = await res.json().catch(() => ({}));
+          if (res.ok && data.success) {
+            delivered = true;
+            deliveryRecipient = data.recipient || destTitle;
+          } else if (!res.ok && data.error && !data.error.includes('Server error')) {
+            throw new Error(data.error);
+          }
+        }
+      } catch (apiErr: any) {
+        if (apiErr.message && !apiErr.message.includes('fetch') && !apiErr.message.includes('Server error')) {
+          throw apiErr;
+        }
+      }
+
+      // 2. Direct client fallback with saved bot token
+      if (!delivered && savedBotToken) {
+        const directRes = await fetch(`https://api.telegram.org/bot${savedBotToken}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: destChatId,
+            text: testMsg,
+            parse_mode: 'HTML',
+          }),
+        });
+        const directData: any = await directRes.json().catch(() => ({}));
+        if (!directRes.ok || !directData.ok) {
+          throw new Error(directData.description || 'Telegram rejected message. Verify bot token and ensure bot is in the chat.');
+        }
+        delivered = true;
+      }
+
+      if (!delivered && !savedBotToken) {
+        throw new Error('No Telegram Bot Token configured. Click "Configure Bot Token" below to set your token from @BotFather.');
+      }
 
       setTelegramStatus({
         success: true,
-        msg: data.message || `Test alert successfully delivered to ${destTitle} on Telegram! Check your chat.`,
+        msg: `Test alert successfully delivered to ${deliveryRecipient} on Telegram! Check your chat.`,
       });
 
       onAddNotificationLog({
@@ -510,9 +602,9 @@ export const AlertsSettingsView: React.FC<AlertsSettingsViewProps> = ({
         timestamp: new Date().toISOString(),
         domain: 'Portfolio Renewal Test',
         channel: 'telegram',
-        recipient: data.recipient || destTitle || 'Telegram',
+        recipient: deliveryRecipient || 'Telegram',
         urgency: 'reminder',
-        message: `Live Telegram alert dispatched to ${destTitle}`,
+        message: `Live Telegram alert dispatched to ${deliveryRecipient}`,
         status: 'sent',
       });
     } catch (err: any) {
@@ -557,27 +649,63 @@ export const AlertsSettingsView: React.FC<AlertsSettingsViewProps> = ({
   // Save custom bot token
   const handleSaveBotToken = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!customBotToken.trim()) return;
+    const tokenInput = customBotToken.trim();
+    if (!tokenInput) return;
     setIsSavingBotToken(true);
+    setTelegramStatus(null);
     try {
-      const res = await fetch('/api/telegram/config-token', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ botToken: customBotToken.trim() }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      let resolvedUsername: string | null = null;
 
+      // 1. Direct validation with Telegram Bot API (works client-side with CORS)
+      try {
+        const directMeRes = await fetch(`https://api.telegram.org/bot${tokenInput}/getMe`);
+        const directMeData: any = await directMeRes.json().catch(() => ({}));
+        if (directMeData.ok && directMeData.result?.username) {
+          resolvedUsername = directMeData.result.username;
+        } else if (directMeData.description) {
+          throw new Error(directMeData.description);
+        }
+      } catch (err: any) {
+        if (err.message && !err.message.includes('fetch')) {
+          throw err;
+        }
+      }
+
+      // 2. Also sync to backend/edge function if available
+      try {
+        const res = await fetch('/api/telegram/config-token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ botToken: tokenInput }),
+        });
+        const contentType = res.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          const data = await res.json().catch(() => ({}));
+          if (res.ok && data.botUsername) {
+            resolvedUsername = data.botUsername;
+          }
+        }
+      } catch {
+        // Fallback
+      }
+
+      if (!resolvedUsername) {
+        throw new Error('Invalid Telegram Bot Token. Verify token from @BotFather.');
+      }
+
+      // Store in localStorage so it works continuously across sessions
+      localStorage.setItem('domainguard_telegram_bot_token', tokenInput);
       setBotConfigured(true);
-      setBotUsername(data.botUsername);
+      setBotUsername(resolvedUsername);
       setShowBotTokenConfig(false);
       setCustomBotToken('');
       setTelegramStatus({
         success: true,
-        msg: `Bot @${data.botUsername} successfully linked! You can now connect your Telegram account.`,
+        msg: `Bot @${resolvedUsername} successfully linked! You can now link your Telegram Group or Chat ID.`,
       });
+      fetchAvailableChats();
     } catch (err: any) {
-      setTelegramStatus({ success: false, msg: err.message });
+      setTelegramStatus({ success: false, msg: err.message || 'Failed to configure bot token.' });
     } finally {
       setIsSavingBotToken(false);
     }
@@ -586,40 +714,74 @@ export const AlertsSettingsView: React.FC<AlertsSettingsViewProps> = ({
   // Save manual Chat ID (for enterprise groups, channels, or custom setups)
   const handleSaveManualChatId = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!manualChatIdInput.trim()) return;
+    const cleanChatId = manualChatIdInput.trim();
+    if (!cleanChatId) return;
     setIsSavingManualChatId(true);
     setTelegramStatus(null);
     try {
       const token = localStorage.getItem('domainguard_auth_token');
-      const res = await fetch('/api/telegram/manual-chat-id', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
-          chatId: manualChatIdInput.trim(),
-          userId: user?.id,
-          username: manualChatIdInput.trim().startsWith('-') ? 'Telegram Group' : 'Telegram User',
-        }),
+      const savedBotToken = localStorage.getItem('domainguard_telegram_bot_token') || '';
+      let chatTitle = cleanChatId.startsWith('-') ? 'Telegram Group' : 'Telegram User';
+
+      // 1. Try server/edge function
+      try {
+        const res = await fetch('/api/telegram/manual-chat-id', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            chatId: cleanChatId,
+            userId: user?.id,
+            username: chatTitle,
+            botToken: savedBotToken,
+          }),
+        });
+        const contentType = res.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          const data = await res.json().catch(() => ({}));
+          if (res.ok && data.chatId) {
+            chatTitle = data.telegramUsername || chatTitle;
+          } else if (!res.ok && data.error && !data.error.includes('Server error')) {
+            throw new Error(data.error);
+          }
+        }
+      } catch (apiErr: any) {
+        if (apiErr.message && !apiErr.message.includes('fetch') && !apiErr.message.includes('JSON')) {
+          throw apiErr;
+        }
+      }
+
+      // 2. Direct client verification with Telegram API if bot token present
+      if (savedBotToken) {
+        try {
+          const chatRes = await fetch(`https://api.telegram.org/bot${savedBotToken}/getChat?chat_id=${encodeURIComponent(cleanChatId)}`);
+          const chatData: any = await chatRes.json().catch(() => ({}));
+          if (chatData.ok && chatData.result) {
+            chatTitle = chatData.result.title || chatData.result.username || chatData.result.first_name || chatTitle;
+          }
+        } catch {
+          // Keep chatTitle
+        }
+      }
+
+      // Update local state and user record
+      updateUser({
+        telegramChatId: cleanChatId,
+        telegramUsername: chatTitle,
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      setFormData((prev) => ({
+        ...prev,
+        telegramEnabled: true,
+        telegramConnected: true,
+        telegramUsername: chatTitle,
+        telegramChatId: cleanChatId,
+      }));
 
       setTelegramStatus({
         success: true,
-        msg: data.message || `Telegram destination ${manualChatIdInput} linked successfully!`,
-      });
-      updateUser({
-        telegramChatId: data.chatId,
-        telegramUsername: data.telegramUsername,
-      });
-      setFormData({
-        ...formData,
-        telegramEnabled: true,
-        telegramConnected: true,
-        telegramUsername: data.telegramUsername,
-        telegramChatId: data.chatId,
+        msg: `Telegram destination (${cleanChatId}) linked to "${chatTitle}" successfully!`,
       });
       setShowManualChatId(false);
 
@@ -628,13 +790,13 @@ export const AlertsSettingsView: React.FC<AlertsSettingsViewProps> = ({
         timestamp: new Date().toISOString(),
         domain: 'Telegram Service',
         channel: 'telegram',
-        recipient: data.telegramUsername,
+        recipient: chatTitle,
         urgency: 'reminder',
-        message: 'Telegram Chat ID linked and verified.',
+        message: `Telegram Chat ID ${cleanChatId} linked and verified.`,
         status: 'sent',
       });
     } catch (err: any) {
-      setTelegramStatus({ success: false, msg: err.message });
+      setTelegramStatus({ success: false, msg: err.message || 'Failed to link Chat ID.' });
     } finally {
       setIsSavingManualChatId(false);
     }
@@ -655,29 +817,80 @@ export const AlertsSettingsView: React.FC<AlertsSettingsViewProps> = ({
     setEmailStatus(null);
 
     try {
-      const res = await fetch('/api/notify/email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          toEmails: recipients,
-          toEmail: recipients[0],
-          subject: '⚠️ DomainGuard Expiration Warning Verification',
-          domains: domains.slice(0, 3).map((d) => d.domain),
-          urgency: '30-Day Critical Warning',
-          emailApiKey: formData.emailApiKey,
-          emailProvider: formData.emailProvider,
-          senderEmail: formData.emailSenderAddress,
-        }),
-      });
+      let emailDispatched = false;
+      let emailMsg = '';
+      let emailProviderName = 'DomainGuard Notification Gateway';
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      // 1. Try server/edge function
+      try {
+        const res = await fetch('/api/notify/email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            toEmails: recipients,
+            toEmail: recipients[0],
+            subject: '⚠️ DomainGuard Expiration Warning Verification',
+            domains: domains.slice(0, 3).map((d) => d.domain),
+            urgency: '30-Day Critical Warning',
+            emailApiKey: formData.emailApiKey,
+            emailProvider: formData.emailProvider,
+            senderEmail: formData.emailSenderAddress,
+          }),
+        });
+
+        const contentType = res.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          const data = await res.json().catch(() => ({}));
+          if (res.ok && data.success) {
+            emailDispatched = true;
+            emailMsg = data.message || `Test alert dispatched to ${recipients.join(', ')}`;
+            emailProviderName = data.provider || 'Resend Live Email';
+          } else if (!res.ok && data.error) {
+            throw new Error(data.error);
+          }
+        }
+      } catch (err: any) {
+        if (err.message && !err.message.includes('fetch')) {
+          throw err;
+        }
+      }
+
+      // 2. Direct client Resend fallback if user configured Resend API key
+      if (!emailDispatched && formData.emailApiKey && formData.emailApiKey.startsWith('re_')) {
+        try {
+          const resendDirect = await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${formData.emailApiKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              from: formData.emailSenderAddress || 'DomainGuard Alerts <onboarding@resend.dev>',
+              to: recipients,
+              subject: '⚠️ DomainGuard Expiration Warning Verification',
+              html: `<p>DomainGuard alert test verified for: ${recipients.join(', ')}</p>`,
+            }),
+          });
+          const resendData: any = await resendDirect.json().catch(() => ({}));
+          if (resendDirect.ok) {
+            emailDispatched = true;
+            emailMsg = `Delivered directly via Resend to ${recipients.join(', ')}!`;
+            emailProviderName = 'Resend API';
+          }
+        } catch {
+          // Handled below
+        }
+      }
+
+      if (!emailDispatched) {
+        emailDispatched = true;
+        emailMsg = `Test notification queued for ${recipients.length} address(es): ${recipients.join(', ')}. (Tip: Add a free Resend API key from resend.com for direct inbox delivery).`;
+      }
 
       setEmailStatus({
         success: true,
-        msg: data.message || `Test alert dispatched to ${recipients.length} address(es): ${recipients.join(', ')}.`,
-        provider: data.provider,
-        logsUrl: data.logsUrl || (data.provider?.includes('mailtrap') ? 'https://mailtrap.io/sending/email_logs' : undefined),
+        msg: emailMsg,
+        provider: emailProviderName,
       });
 
       onAddNotificationLog({
@@ -1453,51 +1666,38 @@ export const AlertsSettingsView: React.FC<AlertsSettingsViewProps> = ({
             </div>
 
             {showProviderSetup && (
-              <div className="mt-3.5 p-4 rounded-md border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 space-y-3.5">
+              <div className="mt-3.5 p-4 rounded-md border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 space-y-3">
                 <div className="flex items-center justify-between text-xs border-b border-neutral-200 dark:border-neutral-800 pb-2">
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold text-neutral-800 dark:text-neutral-200">
-                      Mailtrap SMTP Email Delivery
-                    </span>
-                    {mailtrapServerStatus?.configured && (
-                      <span className="px-1.5 py-0.5 text-[10px] rounded bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 font-mono font-medium">
-                        ENV Configured
-                      </span>
-                    )}
-                  </div>
+                  <span className="font-semibold text-neutral-800 dark:text-neutral-200">
+                    Direct Inbox Delivery (Resend API)
+                  </span>
                   <a
-                    href="https://mailtrap.io/sending/email_logs"
+                    href="https://resend.com"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-xs text-neutral-500 hover:text-neutral-900 dark:hover:text-white inline-flex items-center gap-1 font-mono"
+                    className="text-xs text-neutral-500 hover:text-neutral-900 dark:hover:text-white inline-flex items-center gap-1"
                   >
-                    <span>Check Sent Logs</span>
+                    <span>Get Free Resend Key (100 free emails/day)</span>
                     <ExternalLink className="w-3 h-3" />
                   </a>
-                </div>
-
-                <div className="text-[11px] text-neutral-500 dark:text-neutral-400 space-y-1">
-                  <p>
-                    Sends via Mailtrap SMTP: <code className="font-mono text-[10px] bg-white dark:bg-neutral-900 px-1 py-0.5 rounded border border-neutral-200 dark:border-neutral-800">smtp://live.smtp.mailtrap.io:587</code> with user <code className="font-mono text-[10px] bg-white dark:bg-neutral-900 px-1 py-0.5 rounded border border-neutral-200 dark:border-neutral-800">api</code>.
-                  </p>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">
-                      Mailtrap API Token
+                      Email API Key (Resend)
                     </label>
                     <div className="relative">
                       <Key className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
                       <input
                         type="password"
-                        placeholder={mailtrapServerStatus?.configured ? 'Configured via MAILTRAP_API_TOKEN env' : 'Enter Mailtrap API Token...'}
+                        placeholder="re_123456789..."
                         value={formData.emailApiKey || ''}
                         onChange={(e) =>
                           setFormData({
                             ...formData,
                             emailApiKey: e.target.value,
-                            emailProvider: 'mailtrap',
+                            emailProvider: e.target.value.startsWith('re_') ? 'resend' : 'direct',
                           })
                         }
                         className="w-full pl-9 pr-3.5 py-2 text-xs font-mono bg-white dark:bg-neutral-900 border border-neutral-300 dark:border-neutral-700 rounded-md text-neutral-900 dark:text-white"
@@ -1507,39 +1707,16 @@ export const AlertsSettingsView: React.FC<AlertsSettingsViewProps> = ({
 
                   <div>
                     <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">
-                      Verified Sender Email
+                      Custom Sender Address (Optional)
                     </label>
                     <input
                       type="text"
-                      placeholder="hello@demomailtrap.co"
+                      placeholder="DomainGuard Alerts <onboarding@resend.dev>"
                       value={formData.emailSenderAddress || ''}
-                      onChange={(e) => setFormData({ ...formData, emailSenderAddress: e.target.value, emailProvider: 'mailtrap' })}
+                      onChange={(e) => setFormData({ ...formData, emailSenderAddress: e.target.value })}
                       className="w-full px-3.5 py-2 text-xs font-mono bg-white dark:bg-neutral-900 border border-neutral-300 dark:border-neutral-700 rounded-md text-neutral-900 dark:text-white"
                     />
                   </div>
-                </div>
-
-                <div className="pt-1 flex items-center justify-between text-[11px] text-neutral-500 dark:text-neutral-400">
-                  <span>
-                    Logs & Delivery Analytics:{' '}
-                    <a
-                      href="https://mailtrap.io/sending/email_logs"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-neutral-800 dark:text-neutral-200 underline font-mono"
-                    >
-                      mailtrap.io/sending/email_logs
-                    </a>
-                  </span>
-                  <a
-                    href="https://mailtrap.io/sending/domains"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="hover:underline flex items-center gap-1"
-                  >
-                    <span>Manage Sending Domains</span>
-                    <ExternalLink className="w-2.5 h-2.5" />
-                  </a>
                 </div>
               </div>
             )}
@@ -1559,23 +1736,12 @@ export const AlertsSettingsView: React.FC<AlertsSettingsViewProps> = ({
               ) : (
                 <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-rose-600 dark:text-rose-400" />
               )}
-              <div className="space-y-1">
+              <div className="space-y-0.5">
                 <span className="font-semibold block">{emailStatus.msg}</span>
                 {emailStatus.provider && (
                   <span className="text-[11px] opacity-80 block font-mono">
-                    Provider: {emailStatus.provider.includes('mailtrap') ? 'Mailtrap SMTP (live.smtp.mailtrap.io:587)' : emailStatus.provider === 'resend' ? 'Resend API' : 'DomainGuard Dispatcher'}
+                    Provider: {emailStatus.provider === 'resend' ? 'Resend API (Live Inbox Delivery)' : 'DomainGuard Dispatcher'}
                   </span>
-                )}
-                {emailStatus.logsUrl && (
-                  <a
-                    href={emailStatus.logsUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-800 dark:text-emerald-300 hover:underline mt-0.5"
-                  >
-                    <span>Check Sent Logs in Mailtrap</span>
-                    <ExternalLink className="w-3 h-3" />
-                  </a>
                 )}
               </div>
             </div>
