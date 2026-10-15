@@ -14,16 +14,18 @@ import {
   HelpCircle,
   Eye,
   EyeOff,
+  Search,
 } from 'lucide-react';
 
 interface AuthPageProps {
   isDark: boolean;
   onToggleTheme: () => void;
+  onNavigateToLookup?: () => void;
 }
 
 type AuthMode = 'login' | 'register' | 'forgot_password';
 
-export const AuthPage: React.FC<AuthPageProps> = ({ isDark, onToggleTheme }) => {
+export const AuthPage: React.FC<AuthPageProps> = ({ isDark, onToggleTheme, onNavigateToLookup }) => {
   const { login, register, forgotPassword, resetPassword } = useAuth();
 
   const [mode, setMode] = useState<AuthMode>('login');
@@ -151,7 +153,19 @@ export const AuthPage: React.FC<AuthPageProps> = ({ isDark, onToggleTheme }) => 
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
+          {onNavigateToLookup && (
+            <button
+              type="button"
+              onClick={onNavigateToLookup}
+              className="px-3.5 py-1.5 rounded text-xs font-semibold bg-neutral-900 hover:bg-neutral-800 dark:bg-white dark:hover:bg-neutral-100 text-white dark:text-neutral-950 flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
+              title="Search domain expiry and registrar without logging in"
+            >
+              <Search className="w-3.5 h-3.5" />
+              <span>Expiry &amp; Registrar Finder</span>
+            </button>
+          )}
+
           {/* Dark Mode toggle */}
           <button
             type="button"
@@ -165,7 +179,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ isDark, onToggleTheme }) => 
       </header>
 
       {/* Main Authentication Card */}
-      <main className="w-full max-w-lg mx-auto px-3 sm:px-6 py-6 sm:py-10 flex-1 flex flex-col justify-center">
+      <main className="w-full max-w-lg mx-auto px-4 sm:px-6 py-6 sm:py-10 flex-1 flex flex-col justify-center">
         <div className="border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-5 sm:p-9 shadow-sm rounded-lg">
           {/* Tabs: Sign In / Create Account */}
           <div className="flex items-center border-b border-neutral-200 dark:border-neutral-800 mb-6">
@@ -486,6 +500,20 @@ export const AuthPage: React.FC<AuthPageProps> = ({ isDark, onToggleTheme }) => 
               <span>Personalized user isolation: Each account has its own private tracked portfolio</span>
             </div>
           </div>
+
+          {/* Public lookup alternative link */}
+          {onNavigateToLookup && (
+            <div className="mt-4 pt-3.5 border-t border-neutral-100 dark:border-neutral-800 text-center">
+              <button
+                type="button"
+                onClick={onNavigateToLookup}
+                className="text-xs text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white transition-colors cursor-pointer inline-flex items-center gap-1.5"
+              >
+                <Search className="w-3.5 h-3.5 text-neutral-400" />
+                <span>Need a quick check? <strong>Search Expiry &amp; Registrar without signing in &rarr;</strong></span>
+              </button>
+            </div>
+          )}
         </div>
       </main>
 

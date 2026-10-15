@@ -26,6 +26,9 @@ export interface DomainItem {
   };
   notes?: string;
   whoisSource?: string;
+  httpStatusCode?: number | null;
+  httpStatusText?: string | null;
+  httpLatencyMs?: number | null;
 }
 
 export type UserRole = 'owner' | 'admin' | 'monitor' | 'viewer';

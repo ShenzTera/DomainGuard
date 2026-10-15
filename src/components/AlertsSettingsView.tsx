@@ -235,13 +235,20 @@ export const AlertsSettingsView: React.FC<AlertsSettingsViewProps> = ({
       }
       try {
         const token = localStorage.getItem('domainguard_auth_token');
+        const savedBotToken = localStorage.getItem('domainguard_telegram_bot_token') || '';
         const res = await fetch('/api/telegram/verify-status', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            ...(savedBotToken ? { 'x-bot-token': savedBotToken } : {}),
           },
-          body: JSON.stringify({ userId: user?.id }),
+          body: JSON.stringify({
+            userId: user?.id,
+            connectCode,
+            verificationCode: connectCode,
+            botToken: savedBotToken,
+          }),
         });
         const data = await res.json();
         if (data.connected && !cancelled) {
@@ -989,7 +996,7 @@ export const AlertsSettingsView: React.FC<AlertsSettingsViewProps> = ({
         </div>
 
         {showCloudflareGuide && (
-          <div className="mt-4 pt-4 border-t border-sky-200/70 dark:border-sky-900/40 grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+          <div className="mt-4 pt-4 border-t border-sky-200/70 dark:border-sky-900/40 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
             <div className="p-3 rounded bg-white dark:bg-neutral-900 border border-sky-100 dark:border-sky-900/40 space-y-1.5">
               <span className="font-bold text-neutral-900 dark:text-white block">1. Telegram Bot Token</span>
               <p className="text-neutral-600 dark:text-neutral-400 leading-relaxed">
@@ -997,7 +1004,7 @@ export const AlertsSettingsView: React.FC<AlertsSettingsViewProps> = ({
               </p>
             </div>
             <div className="p-3 rounded bg-white dark:bg-neutral-900 border border-sky-100 dark:border-sky-900/40 space-y-1.5">
-              <span className="font-bold text-neutral-900 dark:text-white block">2. Telegram Chat Activation</span>
+              <span className="font-bold text-neutral-900 dark:text-white block">2. Telegram Activation</span>
               <p className="text-neutral-600 dark:text-neutral-400 leading-relaxed">
                 Telegram’s security policy requires users or groups to initiate contact first. Always open your bot on Telegram and tap <strong>START</strong> (or add the bot to your group and send a message) before verifying.
               </p>
@@ -1006,6 +1013,12 @@ export const AlertsSettingsView: React.FC<AlertsSettingsViewProps> = ({
               <span className="font-bold text-neutral-900 dark:text-white block">3. Live Gmail Delivery</span>
               <p className="text-neutral-600 dark:text-neutral-400 leading-relaxed">
                 For delivery directly into Gmail/corporate inboxes, paste a free Resend API key (100 free emails/day from <a href="https://resend.com" target="_blank" rel="noreferrer" className="underline font-semibold">resend.com</a>). Without an API key, alerts are recorded in your in-app audit log.
+              </p>
+            </div>
+            <div className="p-3 rounded bg-white dark:bg-neutral-900 border border-sky-100 dark:border-sky-900/40 space-y-1.5">
+              <span className="font-bold text-neutral-900 dark:text-white block">4. Multi-Device Domain Sync</span>
+              <p className="text-neutral-600 dark:text-neutral-400 leading-relaxed">
+                To sync each account's saved domains across multiple computers on Cloudflare Pages, go to Cloudflare Dashboard → Pages → Settings → Functions → KV namespace bindings → Add binding with Variable name <code>DOMAINS_KV</code> (Free).
               </p>
             </div>
           </div>

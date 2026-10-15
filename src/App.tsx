@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { useDarkMode } from './hooks/useDarkMode';
 import { AuthPage } from './components/AuthPage';
+import { PublicWhoisLookupPage } from './components/PublicWhoisLookupPage';
 import { TopNavigation, NavTab } from './components/TopNavigation';
 import { DashboardView } from './components/DashboardView';
 import { WhoisLookupView } from './components/WhoisLookupView';
@@ -27,6 +28,7 @@ import {
   saveTeam,
   recalculateDaysUntilExpiration,
   fetchDomainWhois,
+  checkWebsiteHttpStatus,
   dispatchAutomatedAlerts,
 } from './lib/domainService';
 
@@ -47,6 +49,18 @@ function MainApplication() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [selectedDomainForDetails, setSelectedDomainForDetails] = useState<DomainItem | null>(null);
+  const [isPublicLookupOpen, setIsPublicLookupOpen] = useState(false);
+
+  // Check URL on initial load for direct lookup deep-link
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const hash = window.location.hash || '';
+      const search = window.location.search || '';
+      if (hash.includes('lookup') || search.includes('lookup')) {
+        setIsPublicLookupOpen(true);
+      }
+    }
+  }, []);
 
   // Load initial data isolated to the authenticated user
   useEffect(() => {
@@ -137,7 +151,11 @@ function MainApplication() {
       const updatedList = await Promise.all(
         domains.map(async (item) => {
           try {
-            const whois = await fetchDomainWhois(item.domain);
+            const [whois, httpCheck] = await Promise.all([
+              fetchDomainWhois(item.domain),
+              checkWebsiteHttpStatus(item.domain).catch(() => null),
+            ]);
+
             let daysUntilExpiration = whois.daysUntilExpiration ?? item.daysUntilExpiration;
             const expirationDate = whois.expirationDate ? whois.expirationDate.split('T')[0] : item.expirationDate;
 
@@ -165,6 +183,9 @@ function MainApplication() {
               nameservers: whois.nameservers?.length ? whois.nameservers : item.nameservers,
               lastCheckedAt: new Date().toISOString(),
               whoisSource: whois.whoisSource || item.whoisSource,
+              httpStatusCode: httpCheck?.status ?? (whois.isResolving ? 200 : 0),
+              httpStatusText: httpCheck?.statusText ?? (whois.isResolving ? '200 OK' : 'Down'),
+              httpLatencyMs: httpCheck?.latencyMs ?? (whois.isResolving ? 40 : null),
             };
           } catch {
             return item;
@@ -310,9 +331,24 @@ function MainApplication() {
     );
   }
 
-  // If not authenticated, show clean email-only login page
+  // If not authenticated, allow accessing public Expiry & Registrar Finder or Sign In
   if (!user) {
-    return <AuthPage isDark={isDark} onToggleTheme={toggleTheme} />;
+    if (isPublicLookupOpen) {
+      return (
+        <PublicWhoisLookupPage
+          onBackToLogin={() => setIsPublicLookupOpen(false)}
+          isDark={isDark}
+          onToggleTheme={toggleTheme}
+        />
+      );
+    }
+    return (
+      <AuthPage
+        onNavigateToLookup={() => setIsPublicLookupOpen(true)}
+        isDark={isDark}
+        onToggleTheme={toggleTheme}
+      />
+    );
   }
 
   const nearExpiryCount = domains.filter((d) => d.daysUntilExpiration <= 30).length;

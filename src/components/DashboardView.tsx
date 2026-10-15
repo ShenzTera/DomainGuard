@@ -1,31 +1,30 @@
 import React, { useState, useMemo } from 'react';
-import { DomainItem, PortfolioTag, AlertSettings } from '../types/domain';
+import { DomainItem, AlertSettings } from '../types/domain';
 import { exportDomainsToCsv } from '../lib/domainService';
 import {
-  ExternalLink,
-  Plus,
-  FileSpreadsheet,
-  Download,
-  RefreshCw,
   Search,
+  Plus,
+  RefreshCw,
+  Download,
   AlertTriangle,
-  CheckCircle2,
-  Clock,
-  ArrowUpDown,
-  Filter,
-  ShieldCheck,
-  Globe,
-  Trash2,
+  ExternalLink,
   Bell,
+  Trash2,
+  FileSpreadsheet,
+  ArrowUpDown,
   Eye,
-  Info,
+  CheckCircle2,
+  XCircle,
+  Filter,
+  X,
+  Globe,
 } from 'lucide-react';
 
 interface DashboardViewProps {
   domains: DomainItem[];
   onOpenAddModal: () => void;
   onOpenImportModal: () => void;
-  onRefreshAll: () => Promise<void>;
+  onRefreshAll: () => void;
   isRefreshing: boolean;
   onDeleteDomain: (id: string) => void;
   onSelectDomainForDetails: (domain: DomainItem) => void;
@@ -34,8 +33,9 @@ interface DashboardViewProps {
   lastUpdated: Date;
 }
 
-type SortField = 'expiry' | 'domain' | 'company' | 'registrar';
+type SortField = 'expiry' | 'domain' | 'company' | 'registrar' | 'statusCode';
 type SortOrder = 'asc' | 'desc';
+type MetricFilter = 'all' | 'near_expiry' | 'critical' | 'resolving' | null;
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
   domains,
@@ -53,17 +53,42 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [selectedPortfolio, setSelectedPortfolio] = useState<string>('all');
   const [sortField, setSortField] = useState<SortField>('expiry'); // Default priority: Near to Expiry
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc'); // ascending in days = nearest to expiry first
+  const [metricFilter, setMetricFilter] = useState<MetricFilter>(null);
+
+  // Statistics calculation
+  const stats = useMemo(() => {
+    const total = domains.length;
+    const expired = domains.filter((d) => d.daysUntilExpiration <= 0).length;
+    const critical7d = domains.filter((d) => d.daysUntilExpiration > 0 && d.daysUntilExpiration <= 7).length;
+    const warn30d = domains.filter((d) => d.daysUntilExpiration > 0 && d.daysUntilExpiration <= 30).length;
+    const healthy = domains.filter((d) => d.daysUntilExpiration > 30).length;
+    const resolving = domains.filter((d) => d.isResolving).length;
+    const resolvingRate = total > 0 ? Math.round((resolving / total) * 100) : 100;
+
+    return { total, expired, critical7d, warn30d, healthy, resolving, resolvingRate };
+  }, [domains]);
 
   // Filter & Priority Sorting (Near to Expiry on top)
   const filteredAndSortedDomains = useMemo(() => {
     let result = [...domains];
 
-    // 1. Portfolio filter
+    // 1. Metric Ribbon Button filter
+    if (metricFilter === 'all') {
+      // keep all
+    } else if (metricFilter === 'near_expiry') {
+      result = result.filter((d) => d.daysUntilExpiration <= 30 && d.daysUntilExpiration > 0);
+    } else if (metricFilter === 'critical') {
+      result = result.filter((d) => d.daysUntilExpiration <= 7);
+    } else if (metricFilter === 'resolving') {
+      result = result.filter((d) => d.isResolving);
+    }
+
+    // 2. Portfolio filter
     if (selectedPortfolio !== 'all') {
       result = result.filter((d) => d.portfolio === selectedPortfolio);
     }
 
-    // 2. Search filter
+    // 3. Search filter
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
       result = result.filter(
@@ -71,11 +96,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           d.domain.toLowerCase().includes(q) ||
           d.company?.toLowerCase().includes(q) ||
           d.registrar?.toLowerCase().includes(q) ||
-          d.portfolio.toLowerCase().includes(q)
+          d.portfolio.toLowerCase().includes(q) ||
+          String(d.httpStatusCode || '').includes(q)
       );
     }
 
-    // 3. Sorting
+    // 4. Sorting
     result.sort((a, b) => {
       if (sortField === 'expiry') {
         // Priority sort: Expired & Near to Expiry (smallest daysUntilExpiration) on top
@@ -98,24 +124,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           ? (a.registrar || '').localeCompare(b.registrar || '')
           : (b.registrar || '').localeCompare(a.registrar || '');
       }
+      if (sortField === 'statusCode') {
+        const aCode = a.httpStatusCode ?? 0;
+        const bCode = b.httpStatusCode ?? 0;
+        return sortOrder === 'asc' ? aCode - bCode : bCode - aCode;
+      }
       return 0;
     });
 
     return result;
-  }, [domains, selectedPortfolio, searchQuery, sortField, sortOrder]);
-
-  // Statistics calculation
-  const stats = useMemo(() => {
-    const total = domains.length;
-    const expired = domains.filter((d) => d.daysUntilExpiration <= 0).length;
-    const critical7d = domains.filter((d) => d.daysUntilExpiration > 0 && d.daysUntilExpiration <= 7).length;
-    const warn30d = domains.filter((d) => d.daysUntilExpiration > 0 && d.daysUntilExpiration <= 30).length;
-    const healthy = domains.filter((d) => d.daysUntilExpiration > 30).length;
-    const resolving = domains.filter((d) => d.isResolving).length;
-    const resolvingRate = total > 0 ? Math.round((resolving / total) * 100) : 100;
-
-    return { total, expired, critical7d, warn30d, healthy, resolvingRate };
-  }, [domains]);
+  }, [domains, metricFilter, selectedPortfolio, searchQuery, sortField, sortOrder]);
 
   const handleExportCsv = () => {
     exportDomainsToCsv(filteredAndSortedDomains);
@@ -127,6 +145,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     } else {
       setSortField(field);
       setSortOrder('asc');
+    }
+  };
+
+  const handleMetricButtonClick = (type: 'all' | 'near_expiry' | 'critical' | 'resolving') => {
+    if (metricFilter === type) {
+      // Toggle off to show all
+      setMetricFilter(null);
+    } else {
+      setMetricFilter(type);
     }
   };
 
@@ -152,7 +179,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             onClick={onRefreshAll}
             disabled={isRefreshing}
             className="px-3 py-2 sm:py-1.5 text-xs font-medium border border-neutral-200 dark:border-neutral-800 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded flex items-center justify-center gap-1.5 transition-colors text-neutral-700 dark:text-neutral-300 disabled:opacity-50 cursor-pointer"
-            title="Perform real-time WHOIS refresh on all domains"
+            title="Perform real-time WHOIS refresh and website HTTP check on all domains"
           >
             <RefreshCw className={`w-3.5 h-3.5 shrink-0 ${isRefreshing ? 'animate-spin' : ''}`} />
             <span className="truncate">{isRefreshing ? 'Checking...' : 'Refresh Status'}</span>
@@ -161,9 +188,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <button
             onClick={onOpenImportModal}
             className="px-3 py-2 sm:py-1.5 text-xs font-medium border border-neutral-200 dark:border-neutral-800 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded flex items-center justify-center gap-1.5 transition-colors text-neutral-700 dark:text-neutral-300 cursor-pointer"
+            title="Import domains from a CSV file"
           >
             <FileSpreadsheet className="w-3.5 h-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
-            <span className="truncate">Import Sheets</span>
+            <span className="truncate font-semibold">Import CSV</span>
           </button>
 
           <button
@@ -184,48 +212,162 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       </div>
 
-      {/* Summary Metric Ribbon (Anti-slop clean tabular display) */}
+      {/* Summary Metric Ribbon: Interactive Buttons to Filter What Is Under Each */}
+      {/* Summary Metric Ribbon: Interactive Buttons to Filter What Is Under Each */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
-        <div className="p-3 sm:p-3.5 border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 rounded">
-          <div className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400 truncate">
-            Total Monitored
+        {/* Button 1: Total Monitored */}
+        <button
+          type="button"
+          onClick={() => handleMetricButtonClick('all')}
+          className={`p-3 sm:p-3.5 border rounded text-left transition-all cursor-pointer relative group min-h-[96px] h-full flex flex-col justify-between ${
+            metricFilter === 'all'
+              ? 'border-neutral-900 dark:border-white ring-2 ring-neutral-900/20 dark:ring-white/20 bg-neutral-100 dark:bg-neutral-800 shadow-sm'
+              : 'border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 hover:border-neutral-400 dark:hover:border-neutral-600 hover:shadow-xs'
+          }`}
+          title="Click to view all monitored domains"
+        >
+          <div className="flex items-center justify-between gap-1">
+            <span className="text-[11px] font-semibold text-neutral-600 dark:text-neutral-300 truncate">
+              Total Monitored
+            </span>
+            <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded shrink-0 ${
+              metricFilter === 'all'
+                ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-950 font-bold'
+                : 'text-neutral-400 group-hover:text-neutral-700 dark:group-hover:text-neutral-300'
+            }`}>
+              {metricFilter === 'all' ? 'Active' : 'Filter ↗'}
+            </span>
           </div>
-          <div className="text-lg sm:text-xl font-bold font-mono text-neutral-900 dark:text-white mt-1">
+          <div className="text-xl sm:text-2xl font-bold font-mono text-neutral-900 dark:text-white my-1">
             {stats.total}
           </div>
-          <div className="text-[11px] text-neutral-400 mt-0.5 truncate">Across all portfolios</div>
-        </div>
-
-        <div className="p-3 sm:p-3.5 border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 rounded">
-          <div className="text-[11px] font-medium text-amber-600 dark:text-amber-400 truncate">
-            Near to Expiry (&le;30 Days)
+          <div className="text-[11px] text-neutral-500 dark:text-neutral-400 truncate">
+            Across all portfolios
           </div>
-          <div className="text-lg sm:text-xl font-bold font-mono text-amber-600 dark:text-amber-400 mt-1">
+        </button>
+
+        {/* Button 2: Near to Expiry */}
+        <button
+          type="button"
+          onClick={() => handleMetricButtonClick('near_expiry')}
+          className={`p-3 sm:p-3.5 border rounded text-left transition-all cursor-pointer relative group min-h-[96px] h-full flex flex-col justify-between ${
+            metricFilter === 'near_expiry'
+              ? 'border-amber-500 ring-2 ring-amber-500/30 bg-amber-50/80 dark:bg-amber-950/40 shadow-sm'
+              : 'border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 hover:border-amber-400 dark:hover:border-amber-600 hover:shadow-xs'
+          }`}
+          title="Click to filter domains expiring within 30 days"
+        >
+          <div className="flex items-center justify-between gap-1">
+            <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-400 truncate">
+              Near to Expiry
+            </span>
+            <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded shrink-0 ${
+              metricFilter === 'near_expiry'
+                ? 'bg-amber-500 text-white font-bold'
+                : 'text-amber-500/80 group-hover:text-amber-700 dark:group-hover:text-amber-300'
+            }`}>
+              {metricFilter === 'near_expiry' ? 'Active' : 'Filter ↗'}
+            </span>
+          </div>
+          <div className="text-xl sm:text-2xl font-bold font-mono text-amber-600 dark:text-amber-400 my-1">
             {stats.warn30d}
           </div>
-          <div className="text-[11px] text-neutral-400 mt-0.5 truncate">Top priority queue</div>
-        </div>
-
-        <div className="p-3 sm:p-3.5 border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 rounded">
-          <div className="text-[11px] font-medium text-rose-600 dark:text-rose-400 truncate">
-            Critical / Expired
+          <div className="text-[11px] text-amber-600/80 dark:text-amber-400/80 truncate">
+            ≤ 30 days priority queue
           </div>
-          <div className="text-lg sm:text-xl font-bold font-mono text-rose-600 dark:text-rose-400 mt-1">
+        </button>
+
+        {/* Button 3: Critical / Expired */}
+        <button
+          type="button"
+          onClick={() => handleMetricButtonClick('critical')}
+          className={`p-3 sm:p-3.5 border rounded text-left transition-all cursor-pointer relative group min-h-[96px] h-full flex flex-col justify-between ${
+            metricFilter === 'critical'
+              ? 'border-rose-500 ring-2 ring-rose-500/30 bg-rose-50/80 dark:bg-rose-950/40 shadow-sm'
+              : 'border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 hover:border-rose-400 dark:hover:border-rose-600 hover:shadow-xs'
+          }`}
+          title="Click to filter critical domains (≤7 days or expired)"
+        >
+          <div className="flex items-center justify-between gap-1">
+            <span className="text-[11px] font-semibold text-rose-700 dark:text-rose-400 truncate">
+              Critical / Expired
+            </span>
+            <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded shrink-0 ${
+              metricFilter === 'critical'
+                ? 'bg-rose-600 text-white font-bold'
+                : 'text-rose-500/80 group-hover:text-rose-700 dark:group-hover:text-rose-300'
+            }`}>
+              {metricFilter === 'critical' ? 'Active' : 'Filter ↗'}
+            </span>
+          </div>
+          <div className="text-xl sm:text-2xl font-bold font-mono text-rose-600 dark:text-rose-400 my-1">
             {stats.expired + stats.critical7d}
           </div>
-          <div className="text-[11px] text-neutral-400 mt-0.5 truncate">{stats.expired} exp · {stats.critical7d} &le;7d</div>
-        </div>
-
-        <div className="p-3 sm:p-3.5 border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 rounded">
-          <div className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400 truncate">
-            DNS Health & Resolution
+          <div className="text-[11px] text-rose-600/80 dark:text-rose-400/80 truncate">
+            {stats.expired} expired · {stats.critical7d} ≤7d
           </div>
-          <div className="text-lg sm:text-xl font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-1">
+        </button>
+
+        {/* Button 4: DNS Health & Working Websites */}
+        <button
+          type="button"
+          onClick={() => handleMetricButtonClick('resolving')}
+          className={`p-3 sm:p-3.5 border rounded text-left transition-all cursor-pointer relative group min-h-[96px] h-full flex flex-col justify-between ${
+            metricFilter === 'resolving'
+              ? 'border-emerald-500 ring-2 ring-emerald-500/30 bg-emerald-50/80 dark:bg-emerald-950/40 shadow-sm'
+              : 'border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 hover:border-emerald-400 dark:hover:border-emerald-600 hover:shadow-xs'
+          }`}
+          title="Click to filter active resolving domains"
+        >
+          <div className="flex items-center justify-between gap-1">
+            <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 truncate">
+              DNS Health &amp; HTTP
+            </span>
+            <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded shrink-0 ${
+              metricFilter === 'resolving'
+                ? 'bg-emerald-600 text-white font-bold'
+                : 'text-emerald-500/80 group-hover:text-emerald-700 dark:group-hover:text-emerald-300'
+            }`}>
+              {metricFilter === 'resolving' ? 'Active' : 'Filter ↗'}
+            </span>
+          </div>
+          <div className="text-xl sm:text-2xl font-bold font-mono text-emerald-600 dark:text-emerald-400 my-1">
             {stats.resolvingRate}%
           </div>
-          <div className="text-[11px] text-neutral-400 mt-0.5 truncate">Actively routing traffic</div>
-        </div>
+          <div className="text-[11px] text-emerald-600/80 dark:text-emerald-400/80 truncate">
+            {stats.resolving} active routing traffic
+          </div>
+        </button>
       </div>
+
+      {/* Active Metric Filter Bar */}
+      {metricFilter && (
+        <div className="flex items-center justify-between p-3 bg-neutral-900 text-white dark:bg-white dark:text-neutral-950 rounded-lg text-xs shadow-sm">
+          <div className="flex items-center gap-2.5">
+            <Filter className="w-4 h-4 shrink-0" />
+            <span>
+              <strong>Showing:</strong>{' '}
+              {metricFilter === 'all'
+                ? 'All Monitored Domains'
+                : metricFilter === 'near_expiry'
+                ? 'Near to Expiry Domains (≤ 30 Days)'
+                : metricFilter === 'critical'
+                ? 'Critical & Expired Domains (≤ 7 Days)'
+                : 'Active Resolving Domains'}
+            </span>
+            <span className="px-2 py-0.5 rounded font-mono font-bold text-[11px] bg-white/20 dark:bg-neutral-900/20">
+              {filteredAndSortedDomains.length} domains
+            </span>
+          </div>
+          <button
+            onClick={() => setMetricFilter(null)}
+            className="flex items-center gap-1 px-2.5 py-1 rounded bg-white/10 hover:bg-white/20 dark:bg-neutral-900/10 dark:hover:bg-neutral-900/20 font-semibold cursor-pointer transition-colors"
+          >
+            <X className="w-3.5 h-3.5" />
+            <span>Clear Filter (Show All)</span>
+          </button>
+        </div>
+      )}
 
       {/* Priority Expiry Warning Banner (If critical domains exist) */}
       {(stats.warn30d > 0 || stats.expired > 0) && (
@@ -248,7 +390,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <div className="flex items-center gap-1 p-1 bg-neutral-100 dark:bg-neutral-800/80 rounded overflow-x-auto no-scrollbar touch-pan-x text-xs font-medium -mx-1 sm:mx-0 px-1">
           <button
             onClick={() => setSelectedPortfolio('all')}
-            className={`px-3 py-1.5 sm:py-1 rounded shrink-0 transition-colors whitespace-nowrap ${
+            className={`px-3 py-1.5 sm:py-1 rounded shrink-0 transition-colors whitespace-nowrap cursor-pointer ${
               selectedPortfolio === 'all'
                 ? 'bg-white dark:bg-neutral-900 text-neutral-950 dark:text-white shadow-xs font-semibold'
                 : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
@@ -262,7 +404,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <button
                 key={tag}
                 onClick={() => setSelectedPortfolio(tag)}
-                className={`px-2.5 py-1.5 sm:py-1 rounded shrink-0 transition-colors whitespace-nowrap ${
+                className={`px-2.5 py-1.5 sm:py-1 rounded shrink-0 transition-colors whitespace-nowrap cursor-pointer ${
                   selectedPortfolio === tag
                     ? 'bg-white dark:bg-neutral-900 text-neutral-950 dark:text-white shadow-xs font-semibold'
                     : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
@@ -279,7 +421,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
           <input
             type="text"
-            placeholder="Search domain, registrar, company..."
+            placeholder="Search domain, status code, registrar..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-8 pr-3 py-2 sm:py-1.5 text-xs bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded text-neutral-900 dark:text-white placeholder:text-neutral-400 focus:outline-none focus:ring-1 focus:ring-neutral-900 dark:focus:ring-white"
@@ -287,13 +429,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       </div>
 
-      {/* High-Density Data Grid (Mandatory Columns: Domain / Company / Working Status / Registrar / Expiration Date / Renewal) */}
+      {/* High-Density Data Grid (Mandatory Columns: Domain / Company / Working Status & HTTP / Registrar / Expiration Date / Renewal) */}
       <div className="border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 rounded shadow-xs overflow-hidden">
         <div className="overflow-x-auto touch-pan-x">
-          <table className="w-full text-left text-xs min-w-[800px]">
+          <table className="w-full text-left text-xs min-w-[850px]">
             <thead className="bg-neutral-50 dark:bg-neutral-950 text-neutral-500 dark:text-neutral-400 font-semibold border-b border-neutral-200 dark:border-neutral-800">
               <tr>
-                {/* Column 1: Domain */}
+                {/* Column 1: Domain & Open In New Tab */}
                 <th className="px-4 py-3 cursor-pointer select-none" onClick={() => handleSortToggle('domain')}>
                   <div className="flex items-center gap-1.5">
                     <span>Domain</span>
@@ -309,9 +451,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   </div>
                 </th>
 
-                {/* Column 3: Working Status */}
-                <th className="px-4 py-3">
-                  <span>Working Status</span>
+                {/* Column 3: Working Status & HTTP Code */}
+                <th className="px-4 py-3 cursor-pointer select-none" onClick={() => handleSortToggle('statusCode')}>
+                  <div className="flex items-center gap-1.5">
+                    <span>Working Status &amp; HTTP Code</span>
+                    <ArrowUpDown className="w-3 h-3 text-neutral-400" />
+                  </div>
                 </th>
 
                 {/* Column 4: Registrar */}
@@ -346,7 +491,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               {filteredAndSortedDomains.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-4 py-12 text-center text-neutral-400 dark:text-neutral-500">
-                    No domains found matching the current filters.
+                    <div className="flex flex-col items-center justify-center gap-2">
+                      <p>No domains found matching the current filters.</p>
+                      {metricFilter && (
+                        <button
+                          onClick={() => setMetricFilter(null)}
+                          className="text-xs text-sky-600 dark:text-sky-400 hover:underline font-semibold"
+                        >
+                          Clear metric filter
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ) : (
@@ -354,6 +509,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   const isExpired = domain.daysUntilExpiration <= 0;
                   const isCritical7d = domain.daysUntilExpiration > 0 && domain.daysUntilExpiration <= 7;
                   const isWarning30d = domain.daysUntilExpiration > 7 && domain.daysUntilExpiration <= 30;
+
+                  // Clean domain URL for opening in a new tab
+                  const cleanDomainUrl = domain.domain.startsWith('http')
+                    ? domain.domain
+                    : `https://${domain.domain.replace(/^(?:https?:\/\/)?(?:www\.)?/i, '')}`;
+
+                  const statusCode = domain.httpStatusCode ?? (domain.isResolving ? 200 : 0);
+                  const isHttpOk = statusCode >= 200 && statusCode < 400;
 
                   return (
                     <tr
@@ -368,23 +531,28 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                           : ''
                       }`}
                     >
-                      {/* Column 1: Domain */}
-                      <td className="px-4 py-3.5">
-                        <div className="flex items-center gap-2">
+                      {/* Column 1: Domain + Minimalistic Option to Open in New Tab */}
+                      <td className="px-4 py-3.5 align-middle">
+                        <div className="flex items-center gap-1.5">
                           <button
                             onClick={() => onSelectDomainForDetails(domain)}
-                            className="font-mono font-semibold text-neutral-950 dark:text-white hover:underline text-left"
-                            title="Click to view full WHOIS / RDAP record"
+                            className="font-mono font-semibold text-neutral-950 dark:text-white hover:underline text-left cursor-pointer truncate max-w-[200px] sm:max-w-[240px]"
+                            title="Click to view full WHOIS & RDAP record"
                           >
                             {domain.domain}
                           </button>
-                          <button
-                            onClick={() => onSelectDomainForDetails(domain)}
-                            className="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"
-                            title="Inspect WHOIS"
+
+                          {/* Minimalistic Open in New Tab Icon */}
+                          <a
+                            href={cleanDomainUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 transition-colors p-0.5 shrink-0 inline-flex items-center justify-center"
+                            title={`Open ${domain.domain} in new tab`}
+                            onClick={(e) => e.stopPropagation()}
                           >
-                            <Eye className="w-3.5 h-3.5" />
-                          </button>
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </a>
                         </div>
                         <div className="flex items-center gap-1.5 text-[11px] text-neutral-500 dark:text-neutral-400 mt-0.5">
                           <span>{domain.portfolio}</span>
@@ -396,7 +564,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       </td>
 
                       {/* Column 2: Company */}
-                      <td className="px-4 py-3.5">
+                      <td className="px-4 py-3.5 align-middle">
                         <div className="font-medium text-neutral-900 dark:text-neutral-100">
                           {domain.company || 'Privacy Protected'}
                         </div>
@@ -407,63 +575,83 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         )}
                       </td>
 
-                      {/* Column 3: Working Status */}
-                      <td className="px-4 py-3.5">
-                        <div className="flex items-center gap-1.5">
-                          {isExpired ? (
-                            <span className="inline-flex items-center gap-1 font-mono font-medium text-rose-600 dark:text-rose-400">
-                              <span className="w-1.5 h-1.5 rounded-full bg-rose-600 dark:bg-rose-400"></span>
-                              Expired
+                      {/* Column 3: Working Status & HTTP Status Code */}
+                      <td className="px-4 py-3.5 align-middle">
+                        <div className="flex flex-col gap-1">
+                          {/* Real HTTP Status Code Badge */}
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span
+                              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-mono text-[11px] font-bold border ${
+                                statusCode >= 200 && statusCode < 300
+                                  ? 'bg-emerald-100 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800'
+                                  : statusCode >= 300 && statusCode < 400
+                                  ? 'bg-sky-100 dark:bg-sky-950/70 text-sky-800 dark:text-sky-300 border-sky-300 dark:border-sky-800'
+                                  : statusCode >= 400 && statusCode < 500
+                                  ? 'bg-amber-100 dark:bg-amber-950/70 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-800'
+                                  : 'bg-rose-100 dark:bg-rose-950/70 text-rose-800 dark:text-rose-300 border-rose-300 dark:border-rose-800'
+                              }`}
+                              title={domain.httpStatusText || (isHttpOk ? 'Website reachable' : 'Website offline')}
+                            >
+                              <span
+                                className={`w-1.5 h-1.5 rounded-full ${
+                                  isHttpOk ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'
+                                }`}
+                              ></span>
+                              {statusCode > 0 ? `HTTP ${statusCode}` : 'HTTP Down'}
                             </span>
-                          ) : isCritical7d ? (
-                            <span className="inline-flex items-center gap-1 font-mono font-medium text-rose-600 dark:text-rose-400">
-                              <span className="w-1.5 h-1.5 rounded-full bg-rose-600 animate-pulse"></span>
-                              Urgent &le;7d
-                            </span>
-                          ) : isWarning30d ? (
-                            <span className="inline-flex items-center gap-1 font-mono font-medium text-amber-600 dark:text-amber-400">
-                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
-                              Expiring Soon
-                            </span>
-                          ) : domain.isResolving ? (
-                            <span className="inline-flex items-center gap-1 font-mono font-medium text-emerald-600 dark:text-emerald-400">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                              Active (Resolving)
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 font-mono font-medium text-neutral-500">
-                              <span className="w-1.5 h-1.5 rounded-full bg-neutral-400"></span>
-                              DNS Idle
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-[10px] font-mono text-neutral-400 mt-0.5">
-                          {domain.isResolving ? 'A record ok' : 'No active A'}
+
+                            {domain.httpLatencyMs && (
+                              <span className="text-[10px] font-mono text-neutral-500 dark:text-neutral-400">
+                                {domain.httpLatencyMs}ms
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Human readable working status description */}
+                          <div className="flex items-center gap-1.5 text-[11px]">
+                            {isHttpOk ? (
+                              <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                                Working properly
+                              </span>
+                            ) : statusCode >= 400 ? (
+                              <span className="text-amber-600 dark:text-amber-400 font-medium">
+                                {domain.httpStatusText || 'Response error'}
+                              </span>
+                            ) : !domain.isResolving ? (
+                              <span className="text-rose-600 dark:text-rose-400 font-medium">
+                                Site unreachable / DNS idle
+                              </span>
+                            ) : (
+                              <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                                Working properly
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </td>
 
                       {/* Column 4: Registrar */}
-                      <td className="px-4 py-3.5">
+                      <td className="px-4 py-3.5 align-middle">
                         <div className="font-medium text-neutral-900 dark:text-neutral-100">
                           {domain.registrar || 'ICANN Registrar'}
                         </div>
                         <div className="text-[11px] text-neutral-400 dark:text-neutral-500 font-mono">
-                          {domain.nameservers?.[0] ? domain.nameservers[0].split('.')[1] : 'Nameserver active'}
+                          {domain.nameservers?.[0] || 'Managed Nameserver'}
                         </div>
                       </td>
 
-                      {/* Column 5: Expiration Date */}
-                      <td className="px-4 py-3.5 bg-neutral-50/40 dark:bg-neutral-900/40">
-                        <div className="font-mono font-semibold text-neutral-900 dark:text-white">
-                          {domain.expirationDate}
+                      {/* Column 5: Expiration Date (Priority Column) */}
+                      <td className="px-4 py-3.5 align-middle bg-neutral-100/40 dark:bg-neutral-900/60 font-mono">
+                        <div className="font-bold text-neutral-950 dark:text-white">
+                          {domain.expirationDate || 'Pending WHOIS'}
                         </div>
                         <div className="mt-0.5">
                           <span
-                            className={`font-mono font-bold text-[11px] ${
+                            className={`inline-block font-semibold text-[11px] ${
                               isExpired
-                                ? 'text-rose-600 dark:text-rose-400'
+                                ? 'text-rose-600 dark:text-rose-400 font-bold'
                                 : isCritical7d
-                                ? 'text-rose-600 dark:text-rose-400'
+                                ? 'text-rose-600 dark:text-rose-400 font-bold'
                                 : isWarning30d
                                 ? 'text-amber-600 dark:text-amber-400'
                                 : 'text-neutral-500 dark:text-neutral-400'
@@ -477,12 +665,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       </td>
 
                       {/* Column 6: Immediate Renewal CTA Button */}
-                      <td className="px-4 py-3.5 text-right">
+                      <td className="px-4 py-3.5 align-middle text-right">
                         <a
                           href={domain.registrarPortalUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className={`inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold transition-colors whitespace-nowrap ${
+                          className={`inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold transition-colors whitespace-nowrap cursor-pointer ${
                             isExpired || isCritical7d
                               ? 'bg-rose-600 hover:bg-rose-700 text-white shadow-xs'
                               : isWarning30d
@@ -497,7 +685,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       </td>
 
                       {/* Extra actions: 2-day reminder toggle, delete */}
-                      <td className="px-3 py-3.5 text-right">
+                      <td className="px-3 py-3.5 align-middle text-right">
                         <div className="flex items-center justify-end gap-1.5">
                           <button
                             type="button"

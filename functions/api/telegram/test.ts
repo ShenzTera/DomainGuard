@@ -1,16 +1,24 @@
 // Cloudflare Pages Edge Function: /api/telegram/test
 export async function onRequestPost(context: any) {
   try {
-    const { request } = context;
-    const body = await request.json();
-    const botToken = (body.botToken || '').trim();
-    const chatId = (body.chatId || '').trim();
+    const { request, env } = context;
+    const body = await request.json().catch(() => ({}));
+    const headerToken = request.headers.get('x-bot-token') || '';
+    const botToken = (body.botToken || headerToken || env?.TELEGRAM_BOT_TOKEN || '').trim();
+    const chatId = (body.chatId || env?.TELEGRAM_CHAT_ID || '').trim();
     const message = body.message || '🔔 <b>DomainGuard Test Alert</b>\n\nCloudflare Edge Telegram test successful!';
 
-    if (!botToken || !chatId) {
-      return new Response(JSON.stringify({ error: 'Bot Token and Chat ID are required.' }), {
+    if (!botToken) {
+      return new Response(JSON.stringify({ error: 'Telegram Bot Token is required. Please configure it in settings.' }), {
         status: 400,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+      });
+    }
+
+    if (!chatId) {
+      return new Response(JSON.stringify({ error: 'Telegram Chat ID is required. Please link a chat first.' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
       });
     }
 
@@ -24,11 +32,11 @@ export async function onRequestPost(context: any) {
       }),
     });
 
-    const tgData = await tgRes.json().catch(() => ({}));
+    const tgData: any = await tgRes.json().catch(() => ({}));
     if (!tgRes.ok || !tgData.ok) {
       return new Response(JSON.stringify({ error: tgData.description || 'Telegram Bot API error' }), {
         status: 400,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
       });
     }
 
@@ -47,7 +55,7 @@ export async function onRequestPost(context: any) {
   } catch (err: any) {
     return new Response(JSON.stringify({ error: err.message || 'Telegram processing error' }), {
       status: 500,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
     });
   }
 }
@@ -57,7 +65,7 @@ export async function onRequestOptions() {
     headers: {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-bot-token',
     },
   });
 }

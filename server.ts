@@ -23,6 +23,8 @@ import {
   disconnectTelegramUser,
   scanAndGetTelegramChats,
   setActiveTelegramDestination,
+  getUserDomains,
+  saveUserDomains,
   UserRecord,
 } from './src/server/authStore.ts';
 
@@ -602,6 +604,145 @@ app.post('/api/auth/reset-password', (req, res) => {
     });
   } catch (err: any) {
     return res.status(400).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// User Account Domains Persistence Endpoints
+// Allows users to access their saved domains across any computer
+// ==========================================
+
+// Get saved domains for the authenticated user account
+app.get('/api/domains', optionalAuth, (req: any, res) => {
+  const userId = req.user?.id || (req.query.userId as string);
+  const userEmail = req.user?.email || (req.query.userEmail as string);
+
+  if (!userId && !userEmail) {
+    return res.status(401).json({ error: 'Authentication or userId required to fetch saved domains.' });
+  }
+
+  const saved = getUserDomains(userId, userEmail);
+  return res.json({
+    success: true,
+    userId: userId || req.user?.id,
+    domains: saved || [],
+  });
+});
+
+// Save or sync domains for the authenticated user account
+app.post('/api/domains', optionalAuth, (req: any, res) => {
+  const userId = req.user?.id || req.body.userId || (req.query.userId as string);
+  const userEmail = req.user?.email || req.body.userEmail || (req.query.userEmail as string);
+  const domains = req.body.domains;
+
+  if (!userId && !userEmail) {
+    return res.status(401).json({ error: 'Authentication or userId required to save domains.' });
+  }
+
+  if (!Array.isArray(domains)) {
+    return res.status(400).json({ error: 'Request body must contain an array of domains.' });
+  }
+
+  saveUserDomains(userId || userEmail, domains, userEmail);
+  return res.json({
+    success: true,
+    message: `Saved ${domains.length} domains to user account.`,
+    count: domains.length,
+  });
+});
+
+app.put('/api/domains', optionalAuth, (req: any, res) => {
+  const userId = req.user?.id || req.body.userId || (req.query.userId as string);
+  const userEmail = req.user?.email || req.body.userEmail || (req.query.userEmail as string);
+  const domains = req.body.domains;
+
+  if (!userId && !userEmail) {
+    return res.status(401).json({ error: 'Authentication or userId required to save domains.' });
+  }
+
+  if (!Array.isArray(domains)) {
+    return res.status(400).json({ error: 'Request body must contain an array of domains.' });
+  }
+
+  saveUserDomains(userId || userEmail, domains, userEmail);
+  return res.json({
+    success: true,
+    message: `Updated ${domains.length} domains in user account.`,
+    count: domains.length,
+  });
+});
+
+// ==========================================
+// Website HTTP Working Status & Status Code Checker
+// ==========================================
+app.get('/api/check-http', async (req, res) => {
+  const rawDomain = (req.query.domain as string || '').trim().toLowerCase().replace(/^(?:https?:\/\/)?(?:www\.)?/i, '').split('/')[0];
+  if (!rawDomain) {
+    return res.status(400).json({ error: 'Domain query parameter is required.' });
+  }
+
+  const startTime = Date.now();
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 4000);
+
+    const httpsRes = await fetch(`https://${rawDomain}`, {
+      method: 'HEAD',
+      signal: controller.signal,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; DomainGuard-Monitor/1.0)',
+      },
+    }).catch(async () => {
+      // Fallback to GET if HEAD rejected or unsupported
+      return await fetch(`https://${rawDomain}`, {
+        method: 'GET',
+        signal: controller.signal,
+        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; DomainGuard-Monitor/1.0)' },
+      });
+    });
+
+    clearTimeout(timeout);
+    const latency = Date.now() - startTime;
+    return res.json({
+      domain: rawDomain,
+      isOnline: httpsRes.status >= 200 && httpsRes.status < 400,
+      statusCode: httpsRes.status,
+      statusText: `${httpsRes.status} ${httpsRes.statusText || 'OK'}`,
+      latencyMs: latency,
+      protocol: 'https',
+    });
+  } catch (httpsErr) {
+    // Try HTTP fallback
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 3500);
+
+      const httpRes = await fetch(`http://${rawDomain}`, {
+        method: 'HEAD',
+        signal: controller.signal,
+        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; DomainGuard-Monitor/1.0)' },
+      });
+
+      clearTimeout(timeout);
+      const latency = Date.now() - startTime;
+      return res.json({
+        domain: rawDomain,
+        isOnline: httpRes.status >= 200 && httpRes.status < 400,
+        statusCode: httpRes.status,
+        statusText: `${httpRes.status} ${httpRes.statusText || 'OK'}`,
+        latencyMs: latency,
+        protocol: 'http',
+      });
+    } catch (err) {
+      return res.json({
+        domain: rawDomain,
+        isOnline: false,
+        statusCode: 0,
+        statusText: 'Unreachable / Down',
+        latencyMs: null,
+        protocol: null,
+      });
+    }
   }
 });
 

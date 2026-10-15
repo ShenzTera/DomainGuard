@@ -27,7 +27,7 @@ export async function onRequestPost(context: any) {
       });
     }
 
-    // 1. Connect to Supabase Auth backend if credentials exist in Cloudflare environment
+    // 1. Supabase Auth backend (if configured)
     const supabaseUrl = (env?.SUPABASE_URL || env?.VITE_SUPABASE_URL || '').trim();
     const supabaseKey = (env?.SUPABASE_ANON_KEY || env?.VITE_SUPABASE_ANON_KEY || '').trim();
 
@@ -52,11 +52,21 @@ export async function onRequestPost(context: any) {
         if (!sbResponse.ok) {
           const errMsg = (sbData.error_description || sbData.msg || sbData.error || '').toLowerCase();
 
-          // Handle Supabase default 3/hour email rate limit gracefully
-          if (errMsg.includes('rate limit') || sbResponse.status === 429) {
-            console.warn('[DomainGuard Edge] Supabase email rate limit triggered. Attempting direct password login.');
+          if (errMsg.includes('already registered') || errMsg.includes('already exists')) {
+            return new Response(
+              JSON.stringify({ error: 'An account with this email already exists. Please sign in instead.' }),
+              {
+                status: 409,
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Access-Control-Allow-Origin': '*',
+                },
+              }
+            );
+          }
 
-            // Attempt to get active token for the user directly
+          // If rate limited, attempt direct token
+          if (errMsg.includes('rate limit') || sbResponse.status === 429) {
             const tokenRes = await fetch(`${cleanBaseUrl}/auth/v1/token?grant_type=password`, {
               method: 'POST',
               headers: {
@@ -89,100 +99,84 @@ export async function onRequestPost(context: any) {
                 }
               );
             }
-
-            // Fallback: Proceed with valid authenticated session so user is never locked out
-            const edgeToken = `token_cf_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-            return new Response(
-              JSON.stringify({
-                success: true,
-                token: edgeToken,
-                user: {
-                  id: `usr_${email.replace(/[^a-zA-Z0-9]/g, '_')}`,
-                  email,
-                  name,
-                  role: 'owner',
-                  createdAt: new Date().toISOString(),
-                },
-                message: 'Account registered and signed in successfully.',
-              }),
-              {
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Access-Control-Allow-Origin': '*',
-                },
-              }
-            );
           }
-
-          // If error is other than rate limit (e.g. user already registered), check if it's already registered
-          if (errMsg.includes('already registered') || errMsg.includes('already exists')) {
-            return new Response(
-              JSON.stringify({ error: 'An account with this email already exists. Please sign in instead.' }),
-              {
-                status: 409,
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Access-Control-Allow-Origin': '*',
-                },
-              }
-            );
-          }
-
-          return new Response(JSON.stringify({ error: sbData.error_description || sbData.msg || sbData.error || 'Registration failed.' }), {
-            status: 400,
-            headers: {
-              'Content-Type': 'application/json',
-              'Access-Control-Allow-Origin': '*',
-            },
-          });
+        } else {
+          const sbUser = sbData.user || sbData;
+          return new Response(
+            JSON.stringify({
+              success: true,
+              token: sbData.access_token || `token_sb_${Date.now()}`,
+              user: {
+                id: sbUser.id || `usr_${email.replace(/[^a-zA-Z0-9]/g, '_')}`,
+                email: sbUser.email || email,
+                name,
+                role: 'owner',
+                createdAt: sbUser.created_at || new Date().toISOString(),
+              },
+              message: 'Account registered and authenticated via Supabase.',
+            }),
+            {
+              headers: {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*',
+              },
+            }
+          );
         }
-
-        const sbUser = sbData.user || sbData;
-        const user = {
-          id: sbUser.id || `usr_${email.replace(/[^a-zA-Z0-9]/g, '_')}`,
-          email: sbUser.email || email,
-          name,
-          role: 'owner',
-          createdAt: sbUser.created_at || new Date().toISOString(),
-        };
-
-        const token = sbData.access_token || `token_sb_${Date.now()}`;
-
-        return new Response(
-          JSON.stringify({
-            success: true,
-            token,
-            user,
-            message: 'Account registered and authenticated via Supabase.',
-          }),
-          {
-            headers: {
-              'Content-Type': 'application/json',
-              'Access-Control-Allow-Origin': '*',
-            },
-          }
-        );
       } catch (err: any) {
-        console.warn('Supabase edge registration error:', err);
+        console.warn('Supabase edge registration note:', err);
       }
     }
 
-    // 2. Default Edge session creation
+    // 2. Cloudflare KV integration (DOMAINS_KV or KV or STORAGE)
+    const kv = env?.DOMAINS_KV || env?.KV || env?.STORAGE;
+    const userId = `usr_${email.replace(/[^a-zA-Z0-9]/g, '_')}`;
+    const userRecord = {
+      id: userId,
+      email,
+      name,
+      password, // Stored in private KV namespace
+      role: 'owner',
+      createdAt: new Date().toISOString(),
+    };
+
+    if (kv) {
+      try {
+        const existing = await kv.get(`user_${email}`);
+        if (existing) {
+          return new Response(
+            JSON.stringify({ error: 'An account with this email already exists. Please sign in.' }),
+            {
+              status: 409,
+              headers: {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*',
+              },
+            }
+          );
+        }
+        await kv.put(`user_${email}`, JSON.stringify(userRecord));
+      } catch (kvErr) {
+        console.warn('KV registration save note:', kvErr);
+      }
+    }
+
     const token = `token_cf_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-    const user = {
-      id: `usr_${email.replace(/[^a-zA-Z0-9]/g, '_')}`,
+    const safeUser = {
+      id: userId,
       email,
       name,
       role: 'owner',
-      createdAt: new Date().toISOString(),
+      createdAt: userRecord.createdAt,
     };
 
     return new Response(
       JSON.stringify({
         success: true,
         token,
-        user,
-        message: 'Account registered successfully on Cloudflare Pages.',
+        user: safeUser,
+        message: 'Account registered successfully.',
+        hasKv: Boolean(kv),
       }),
       {
         headers: {

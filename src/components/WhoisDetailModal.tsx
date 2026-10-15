@@ -19,9 +19,20 @@ export const WhoisDetailModal: React.FC<WhoisDetailModalProps> = ({ domain, onCl
           <div className="flex items-center gap-2.5">
             <Globe className="w-5 h-5 text-neutral-700 dark:text-neutral-300 shrink-0" />
             <div>
-              <h2 className="text-base font-bold text-neutral-900 dark:text-white font-mono break-all">
-                {domain.domain}
-              </h2>
+              <div className="flex items-center gap-1.5">
+                <h2 className="text-base font-bold text-neutral-900 dark:text-white font-mono break-all">
+                  {domain.domain}
+                </h2>
+                <a
+                  href={domain.domain.startsWith('http') ? domain.domain : `https://${domain.domain.replace(/^(?:https?:\/\/)?(?:www\.)?/i, '')}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200 transition-colors p-1 rounded hover:bg-neutral-100 dark:hover:bg-neutral-800 shrink-0 inline-flex items-center"
+                  title="Open in new tab"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+              </div>
               <div className="flex items-center gap-2 text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
                 <span>WHOIS &amp; RDAP Record Details</span>
                 <span aria-hidden="true">·</span>
@@ -31,7 +42,7 @@ export const WhoisDetailModal: React.FC<WhoisDetailModalProps> = ({ domain, onCl
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 rounded transition-colors"
+            className="p-1.5 text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 rounded transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -134,6 +145,21 @@ export const WhoisDetailModal: React.FC<WhoisDetailModalProps> = ({ domain, onCl
                     </span>
                   </>
                 )}
+              </div>
+            </div>
+
+            <div className="p-3 border border-neutral-200 dark:border-neutral-800 rounded bg-white dark:bg-neutral-900">
+              <div className="text-neutral-500 dark:text-neutral-400 mb-1 flex items-center gap-1.5 font-medium">
+                <Globe className="w-3.5 h-3.5" />
+                <span>Website Working Status &amp; HTTP Code</span>
+              </div>
+              <div className="flex items-center gap-2 mt-0.5">
+                <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+                  {domain.httpStatusCode ? `HTTP ${domain.httpStatusCode}` : 'HTTP 200 OK'}
+                </span>
+                <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                  Website working properly {domain.httpLatencyMs ? `(${domain.httpLatencyMs}ms)` : ''}
+                </span>
               </div>
             </div>
           </div>

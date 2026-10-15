@@ -10,6 +10,7 @@ const DATA_DIR = path.resolve(__dirname, '../../data');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json');
 const SETTINGS_FILE = path.join(DATA_DIR, 'server_settings.json');
+const DOMAINS_FILE = path.join(DATA_DIR, 'user_domains.json');
 
 export interface UserRecord {
   id: string;
@@ -59,6 +60,7 @@ let sessionsMap = new Map<string, SessionRecord>(); // token -> SessionRecord
 let passwordResetsMap = new Map<string, PasswordResetRecord>(); // token/code -> record
 let telegramPendingLinks = new Map<string, TelegramPendingLink>(); // userId -> pending link
 let knownTelegramChats = new Map<string, KnownTelegramChat>(); // chatId -> KnownTelegramChat
+let userDomainsMap = new Map<string, any[]>(); // userId/email -> DomainItem[]
 
 let serverTelegramBotToken: string = process.env.TELEGRAM_BOT_TOKEN || '';
 let serverDefaultTelegramChatId: string = process.env.TELEGRAM_CHAT_ID || '';
@@ -67,6 +69,19 @@ let serverDefaultTelegramUsername: string = '';
 function ensureDataDir() {
   if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
+}
+
+function persistUserDomains() {
+  try {
+    ensureDataDir();
+    const obj: Record<string, any[]> = {};
+    for (const [key, val] of userDomainsMap.entries()) {
+      obj[key] = val;
+    }
+    fs.writeFileSync(DOMAINS_FILE, JSON.stringify(obj, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Failed to persist user domains:', err);
   }
 }
 
@@ -226,6 +241,23 @@ export function initAuthStore() {
       }
     } catch (err) {
       console.warn('Error reading sessions file:', err);
+    }
+  }
+
+  // Load user saved domains
+  if (fs.existsSync(DOMAINS_FILE)) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(DOMAINS_FILE, 'utf-8'));
+      if (parsed && typeof parsed === 'object') {
+        userDomainsMap.clear();
+        for (const [key, val] of Object.entries(parsed)) {
+          if (Array.isArray(val)) {
+            userDomainsMap.set(key, val);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Error reading user domains file:', err);
     }
   }
 }
@@ -672,4 +704,23 @@ export function disconnectTelegramUser(userId: string): boolean {
 
 export function getAllUsers(): UserRecord[] {
   return Array.from(usersById.values());
+}
+
+export function getUserDomains(userId: string, userEmail?: string): any[] | null {
+  if (userDomainsMap.has(userId)) {
+    return userDomainsMap.get(userId)!;
+  }
+  if (userEmail && userDomainsMap.has(userEmail.toLowerCase())) {
+    return userDomainsMap.get(userEmail.toLowerCase())!;
+  }
+  return null;
+}
+
+export function saveUserDomains(userId: string, domains: any[], userEmail?: string): void {
+  if (!Array.isArray(domains)) return;
+  userDomainsMap.set(userId, domains);
+  if (userEmail) {
+    userDomainsMap.set(userEmail.toLowerCase(), domains);
+  }
+  persistUserDomains();
 }
