@@ -1,9 +1,30 @@
 import { DomainItem, AlertSettings, NotificationLog, TeamMember } from '../types/domain';
+import {
+  fetchUserDomainsFromSupabase,
+  saveUserDomainsToSupabase,
+} from './supabaseDomainStorage';
 
-const STORAGE_KEY_DOMAINS = 'domainguard_domains_list';
+// Clean up any legacy domain lists from browser localStorage
+if (typeof window !== 'undefined') {
+  try {
+    localStorage.removeItem('domainguard_domains_list');
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('domainguard_domains_list')) {
+        localStorage.removeItem(key);
+      }
+    }
+  } catch {
+    // ignore
+  }
+}
+
 const STORAGE_KEY_SETTINGS = 'domainguard_alert_settings';
 const STORAGE_KEY_NOTIFS = 'domainguard_notif_logs';
 const STORAGE_KEY_TEAM = 'domainguard_team_members';
+
+// In-memory cache for session runtime (replaces browser localStorage for domain tracker items)
+const inMemoryDomainStore = new Map<string, DomainItem[]>();
 
 // Initial realistic domain portfolio for immediate priority dashboard visualization
 export const INITIAL_DOMAINS: DomainItem[] = [
@@ -268,44 +289,66 @@ export const INITIAL_NOTIFICATIONS: NotificationLog[] = [
   },
 ];
 
-// Storage helpers with per-user data isolation
+// Storage helpers with in-memory session cache (cross-device sync handled by Supabase database)
 function getUserKey(baseKey: string, userId?: string | null): string {
   if (!userId) return baseKey;
   const cleanId = userId.replace(/[^a-zA-Z0-9_-]/g, '_');
   return `${baseKey}_${cleanId}`;
 }
 
+/**
+ * Loads domains from in-memory session store.
+ * Initial/persisted load across computers is handled via fetchAccountDomains (Supabase database).
+ */
 export function loadDomains(userId?: string | null): DomainItem[] {
-  if (typeof window === 'undefined') return INITIAL_DOMAINS;
-  const key = getUserKey(STORAGE_KEY_DOMAINS, userId);
-  const raw = localStorage.getItem(key);
-  if (!raw) {
-    // If it's a demo account or initial legacy store, initialize seeded portfolio
-    const isDemoOrAdmin = !userId || userId.includes('admin') || userId.includes('demo');
-    const initialList = isDemoOrAdmin ? INITIAL_DOMAINS : [];
-    saveDomains(initialList, userId);
-    return initialList;
+  const key = getUserKey('domains', userId);
+  const cached = inMemoryDomainStore.get(key);
+  if (cached && cached.length > 0) {
+    return recalculateDaysUntilExpiration(cached);
   }
-  try {
-    const list: DomainItem[] = JSON.parse(raw);
-    return recalculateDaysUntilExpiration(list);
-  } catch {
-    return [];
+
+  // If demo account or initial unauthenticated session, provide initial portfolio in memory
+  const isDemoOrAdmin = !userId || userId.includes('admin') || userId.includes('demo');
+  if (isDemoOrAdmin && (!cached || cached.length === 0)) {
+    inMemoryDomainStore.set(key, INITIAL_DOMAINS);
+    return INITIAL_DOMAINS;
   }
+
+  return cached || [];
 }
 
+/**
+ * Updates the in-memory cache for immediate UI responsiveness.
+ * Actual persistence across devices is handled by Supabase database storage (syncAccountDomains).
+ */
 export function saveDomains(domains: DomainItem[], userId?: string | null): void {
-  if (typeof window === 'undefined') return;
-  const key = getUserKey(STORAGE_KEY_DOMAINS, userId);
-  localStorage.setItem(key, JSON.stringify(domains));
+  const key = getUserKey('domains', userId);
+  inMemoryDomainStore.set(key, domains);
 }
 
-// Fetch saved domains for user account from backend (accessible from any computer)
+/**
+ * Fetches saved domains for user account from Supabase database storage.
+ * Automatically fetches items linked to the authenticated user's ID (auth.uid()).
+ */
 export async function fetchAccountDomains(
   userId?: string | null,
   token?: string | null,
   userEmail?: string | null
 ): Promise<DomainItem[] | null> {
+  // 1. Direct Supabase Database Storage fetch filtered by auth.uid()
+  if (userId) {
+    try {
+      const sbDomains = await fetchUserDomainsFromSupabase(userId);
+      if (sbDomains !== null) {
+        saveDomains(sbDomains, userId);
+        return recalculateDaysUntilExpiration(sbDomains);
+      }
+    } catch (sbErr) {
+      console.warn('[DomainGuard] Supabase database fetch note:', sbErr);
+    }
+  }
+
+  // 2. Fallback to API route (which also queries Supabase database)
   const activeToken = token || (typeof window !== 'undefined' ? localStorage.getItem('domainguard_auth_token') : null);
   const params = new URLSearchParams();
   if (userId) params.append('userId', userId);
@@ -323,10 +366,7 @@ export async function fetchAccountDomains(
     if (res.ok && contentType.includes('application/json')) {
       const data = await res.json();
       if (Array.isArray(data.domains)) {
-        // Cache to local storage if domains exist
-        if (data.domains.length > 0) {
-          saveDomains(data.domains, userId);
-        }
+        saveDomains(data.domains, userId);
         return recalculateDaysUntilExpiration(data.domains);
       }
     }
@@ -337,16 +377,31 @@ export async function fetchAccountDomains(
   return null;
 }
 
-// Persist saved domains to user account on backend (accessible from any computer)
+/**
+ * Persists saved domains to Supabase database storage.
+ * Links every domain item strictly to the authenticated user's ID (auth.uid()).
+ */
 export async function syncAccountDomains(
   domains: DomainItem[],
   userId?: string | null,
   token?: string | null,
   userEmail?: string | null
 ): Promise<boolean> {
-  // Always cache locally first for immediate responsiveness
+  // Update in-memory cache for immediate UI responsiveness
   saveDomains(domains, userId);
 
+  let supabaseSuccess = false;
+
+  // 1. Direct Supabase Database Storage save linked to auth.uid()
+  if (userId) {
+    try {
+      supabaseSuccess = await saveUserDomainsToSupabase(domains, userId);
+    } catch (sbErr) {
+      console.warn('[DomainGuard] Supabase database save error:', sbErr);
+    }
+  }
+
+  // 2. Also notify backend endpoint
   const activeToken = token || (typeof window !== 'undefined' ? localStorage.getItem('domainguard_auth_token') : null);
 
   try {
@@ -358,10 +413,10 @@ export async function syncAccountDomains(
       },
       body: JSON.stringify({ domains, userId, userEmail }),
     });
-    return res.ok;
+    return supabaseSuccess || res.ok;
   } catch (err) {
     console.warn('Background domain sync note:', err);
-    return false;
+    return supabaseSuccess;
   }
 }
 

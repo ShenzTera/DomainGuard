@@ -29,6 +29,11 @@ import {
   saveUserSettings,
   UserRecord,
 } from './src/server/authStore.ts';
+import { createClient as createSupabaseClient } from '@supabase/supabase-js';
+
+const SUPABASE_URL = (process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '').trim();
+const SUPABASE_KEY = (process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '').trim();
+const serverSupabase = SUPABASE_URL && SUPABASE_KEY ? createSupabaseClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -613,14 +618,63 @@ app.post('/api/auth/reset-password', (req, res) => {
 // User Account Domains Persistence Endpoints
 // Allows users to access their saved domains across any computer
 // ==========================================
+// User Account Domains Persistence Endpoints
+// Powered by Supabase Database Storage linked to auth.uid()
+// ==========================================
 
 // Get saved domains for the authenticated user account
-app.get('/api/domains', optionalAuth, (req: any, res) => {
+app.get('/api/domains', optionalAuth, async (req: any, res) => {
   const userId = req.user?.id || (req.query.userId as string);
   const userEmail = req.user?.email || (req.query.userEmail as string);
 
   if (!userId && !userEmail) {
     return res.status(401).json({ error: 'Authentication or userId required to fetch saved domains.' });
+  }
+
+  // 1. Fetch from Supabase database storage if configured
+  if (serverSupabase && userId) {
+    try {
+      const { data, error } = await serverSupabase
+        .from('domains')
+        .select('*')
+        .eq('user_id', userId)
+        .order('days_until_expiration', { ascending: true });
+
+      if (!error && Array.isArray(data)) {
+        const formatted = data.map((r: any) => ({
+          id: String(r.id),
+          domain: String(r.domain || ''),
+          company: r.company || '',
+          workingStatus: r.working_status || r.workingStatus || 'active',
+          registrar: r.registrar || '',
+          registrarPortalUrl: r.registrar_portal_url || r.registrarPortalUrl || '',
+          expirationDate: r.expiration_date || r.expirationDate || '',
+          registrationDate: r.registration_date || r.registrationDate,
+          daysUntilExpiration: typeof r.days_until_expiration === 'number' ? r.days_until_expiration : 0,
+          isResolving: typeof r.is_resolving === 'boolean' ? r.is_resolving : true,
+          nameservers: Array.isArray(r.nameservers) ? r.nameservers : [],
+          dnsIps: Array.isArray(r.dns_ips) ? r.dns_ips : [],
+          portfolio: r.portfolio || 'Core Infrastructure',
+          assignedEmployees: Array.isArray(r.assigned_employees) ? r.assigned_employees : [],
+          lastCheckedAt: r.last_checked_at || new Date().toISOString(),
+          renewalAlerts: r.renewal_alerts || {},
+          notes: r.notes || '',
+          whoisSource: r.whois_source || '',
+          httpStatusCode: r.http_status_code ?? null,
+          httpStatusText: r.http_status_text ?? null,
+          httpLatencyMs: r.http_latency_ms ?? null,
+        }));
+
+        return res.json({
+          success: true,
+          userId,
+          domains: formatted,
+          source: 'supabase_database',
+        });
+      }
+    } catch (sbErr) {
+      console.warn('Server Supabase fetch error:', sbErr);
+    }
   }
 
   const saved = getUserDomains(userId, userEmail);
@@ -631,8 +685,8 @@ app.get('/api/domains', optionalAuth, (req: any, res) => {
   });
 });
 
-// Save or sync domains for the authenticated user account
-app.post('/api/domains', optionalAuth, (req: any, res) => {
+// Save or sync domains for the authenticated user account to Supabase database
+app.post('/api/domains', optionalAuth, async (req: any, res) => {
   const userId = req.user?.id || req.body.userId || (req.query.userId as string);
   const userEmail = req.user?.email || req.body.userEmail || (req.query.userEmail as string);
   const domains = req.body.domains;
@@ -645,15 +699,76 @@ app.post('/api/domains', optionalAuth, (req: any, res) => {
     return res.status(400).json({ error: 'Request body must contain an array of domains.' });
   }
 
+  // 1. Persist directly to Supabase database storage linked to auth.uid()
+  if (serverSupabase && userId) {
+    try {
+      const rows = domains.map((d: any) => ({
+        id: String(d.id),
+        user_id: userId,
+        domain: d.domain,
+        company: d.company || '',
+        working_status: d.workingStatus || 'active',
+        registrar: d.registrar || '',
+        registrar_portal_url: d.registrarPortalUrl || '',
+        expiration_date: d.expirationDate || '',
+        registration_date: d.registrationDate || '',
+        days_until_expiration: typeof d.daysUntilExpiration === 'number' ? d.daysUntilExpiration : 0,
+        is_resolving: Boolean(d.isResolving),
+        nameservers: d.nameservers || [],
+        dns_ips: d.dnsIps || [],
+        portfolio: d.portfolio || 'Core Infrastructure',
+        assigned_employees: d.assignedEmployees || [],
+        last_checked_at: d.lastCheckedAt || new Date().toISOString(),
+        renewal_alerts: d.renewalAlerts || {},
+        notes: d.notes || '',
+        whois_source: d.whoisSource || '',
+        http_status_code: d.httpStatusCode ?? null,
+        http_status_text: d.httpStatusText ?? null,
+        http_latency_ms: d.httpLatencyMs ?? null,
+        updated_at: new Date().toISOString(),
+      }));
+
+      // Delete removed domains
+      const { data: existing } = await serverSupabase
+        .from('domains')
+        .select('id')
+        .eq('user_id', userId);
+
+      if (Array.isArray(existing)) {
+        const existingIds = new Set(existing.map((r: any) => String(r.id)));
+        const incomingIds = new Set(rows.map((r: any) => String(r.id)));
+        const idsToDelete = Array.from(existingIds).filter((id) => !incomingIds.has(id));
+        if (idsToDelete.length > 0) {
+          await serverSupabase
+            .from('domains')
+            .delete()
+            .eq('user_id', userId)
+            .in('id', idsToDelete);
+        }
+      }
+
+      if (rows.length > 0) {
+        let upsertRes = await serverSupabase
+          .from('domains')
+          .upsert(rows, { onConflict: 'id,user_id' });
+        if (upsertRes.error) {
+          await serverSupabase.from('domains').upsert(rows, { onConflict: 'id' });
+        }
+      }
+    } catch (sbErr) {
+      console.warn('Server Supabase save error:', sbErr);
+    }
+  }
+
   saveUserDomains(userId || userEmail, domains, userEmail);
   return res.json({
     success: true,
-    message: `Saved ${domains.length} domains to user account.`,
+    message: `Saved ${domains.length} domains to Supabase database.`,
     count: domains.length,
   });
 });
 
-app.put('/api/domains', optionalAuth, (req: any, res) => {
+app.put('/api/domains', optionalAuth, async (req: any, res) => {
   const userId = req.user?.id || req.body.userId || (req.query.userId as string);
   const userEmail = req.user?.email || req.body.userEmail || (req.query.userEmail as string);
   const domains = req.body.domains;
@@ -666,10 +781,51 @@ app.put('/api/domains', optionalAuth, (req: any, res) => {
     return res.status(400).json({ error: 'Request body must contain an array of domains.' });
   }
 
+  if (serverSupabase && userId) {
+    try {
+      const rows = domains.map((d: any) => ({
+        id: String(d.id),
+        user_id: userId,
+        domain: d.domain,
+        company: d.company || '',
+        working_status: d.workingStatus || 'active',
+        registrar: d.registrar || '',
+        registrar_portal_url: d.registrarPortalUrl || '',
+        expiration_date: d.expirationDate || '',
+        registration_date: d.registrationDate || '',
+        days_until_expiration: typeof d.daysUntilExpiration === 'number' ? d.daysUntilExpiration : 0,
+        is_resolving: Boolean(d.isResolving),
+        nameservers: d.nameservers || [],
+        dns_ips: d.dnsIps || [],
+        portfolio: d.portfolio || 'Core Infrastructure',
+        assigned_employees: d.assignedEmployees || [],
+        last_checked_at: d.lastCheckedAt || new Date().toISOString(),
+        renewal_alerts: d.renewalAlerts || {},
+        notes: d.notes || '',
+        whois_source: d.whoisSource || '',
+        http_status_code: d.httpStatusCode ?? null,
+        http_status_text: d.httpStatusText ?? null,
+        http_latency_ms: d.httpLatencyMs ?? null,
+        updated_at: new Date().toISOString(),
+      }));
+
+      if (rows.length > 0) {
+        let upsertRes = await serverSupabase
+          .from('domains')
+          .upsert(rows, { onConflict: 'id,user_id' });
+        if (upsertRes.error) {
+          await serverSupabase.from('domains').upsert(rows, { onConflict: 'id' });
+        }
+      }
+    } catch (sbErr) {
+      console.warn('Server Supabase update error:', sbErr);
+    }
+  }
+
   saveUserDomains(userId || userEmail, domains, userEmail);
   return res.json({
     success: true,
-    message: `Updated ${domains.length} domains in user account.`,
+    message: `Updated ${domains.length} domains in Supabase database.`,
     count: domains.length,
   });
 });

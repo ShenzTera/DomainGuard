@@ -10,7 +10,6 @@ const DATA_DIR = path.resolve(__dirname, '../../data');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json');
 const SETTINGS_FILE = path.join(DATA_DIR, 'server_settings.json');
-const DOMAINS_FILE = path.join(DATA_DIR, 'user_domains.json');
 const USER_SETTINGS_FILE = path.join(DATA_DIR, 'user_settings.json');
 
 export interface UserRecord {
@@ -71,19 +70,6 @@ let serverDefaultTelegramUsername: string = '';
 function ensureDataDir() {
   if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
-  }
-}
-
-function persistUserDomains() {
-  try {
-    ensureDataDir();
-    const obj: Record<string, any[]> = {};
-    for (const [key, val] of userDomainsMap.entries()) {
-      obj[key] = val;
-    }
-    fs.writeFileSync(DOMAINS_FILE, JSON.stringify(obj, null, 2), 'utf-8');
-  } catch (err) {
-    console.error('Failed to persist user domains:', err);
   }
 }
 
@@ -256,23 +242,6 @@ export function initAuthStore() {
       }
     } catch (err) {
       console.warn('Error reading sessions file:', err);
-    }
-  }
-
-  // Load user saved domains
-  if (fs.existsSync(DOMAINS_FILE)) {
-    try {
-      const parsed = JSON.parse(fs.readFileSync(DOMAINS_FILE, 'utf-8'));
-      if (parsed && typeof parsed === 'object') {
-        userDomainsMap.clear();
-        for (const [key, val] of Object.entries(parsed)) {
-          if (Array.isArray(val)) {
-            userDomainsMap.set(key, val);
-          }
-        }
-      }
-    } catch (err) {
-      console.warn('Error reading user domains file:', err);
     }
   }
 
@@ -764,7 +733,6 @@ export function saveUserDomains(userId: string, domains: any[], userEmail?: stri
   if (canonicalEmail) {
     userDomainsMap.set(canonicalEmail, domains);
   }
-  persistUserDomains();
 }
 
 export function getUserSettings(userId: string, userEmail?: string): any | null {

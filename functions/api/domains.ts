@@ -9,33 +9,72 @@ export async function onRequestGet(context: any) {
     const userId = url.searchParams.get('userId') || '';
     const userEmail = (url.searchParams.get('userEmail') || '').toLowerCase().trim();
 
-    // 1. Supabase integration (if configured)
+    // 1. Supabase Database integration (queries public.domains table linked to auth.uid())
     const supabaseUrl = (env?.SUPABASE_URL || env?.VITE_SUPABASE_URL || '').trim();
     const supabaseKey = (env?.SUPABASE_ANON_KEY || env?.VITE_SUPABASE_ANON_KEY || '').trim();
 
-    if (supabaseUrl && supabaseKey && authHeader.startsWith('Bearer ')) {
-      const token = authHeader.replace('Bearer ', '').trim();
+    if (supabaseUrl && supabaseKey && (authHeader.startsWith('Bearer ') || userId)) {
+      const token = authHeader.startsWith('Bearer ') ? authHeader.replace('Bearer ', '').trim() : '';
+      const targetUserId = userId || '';
       try {
-        const sbRes = await fetch(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/user`, {
-          headers: { Authorization: `Bearer ${token}`, apikey: supabaseKey },
+        const queryParams = new URLSearchParams({
+          select: '*',
+          order: 'days_until_expiration.asc',
         });
+        if (targetUserId) {
+          queryParams.append('user_id', `eq.${targetUserId}`);
+        }
+
+        const sbRes = await fetch(`${supabaseUrl.replace(/\/$/, '')}/rest/v1/domains?${queryParams.toString()}`, {
+          headers: {
+            apikey: supabaseKey,
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            'Content-Type': 'application/json',
+          },
+        });
+
         if (sbRes.ok) {
-          const sbUser: any = await sbRes.json();
-          const domains = sbUser.user_metadata?.saved_domains || [];
-          return new Response(
-            JSON.stringify({
-              success: true,
-              domains,
-              userId: sbUser.id,
-              source: 'supabase',
-            }),
-            {
-              headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-            }
-          );
+          const rawRows: any[] = await sbRes.json();
+          if (Array.isArray(rawRows)) {
+            const formatted = rawRows.map((r) => ({
+              id: String(r.id),
+              domain: String(r.domain || ''),
+              company: r.company || '',
+              workingStatus: r.working_status || r.workingStatus || 'active',
+              registrar: r.registrar || '',
+              registrarPortalUrl: r.registrar_portal_url || r.registrarPortalUrl || '',
+              expirationDate: r.expiration_date || r.expirationDate || '',
+              registrationDate: r.registration_date || r.registrationDate,
+              daysUntilExpiration: typeof r.days_until_expiration === 'number' ? r.days_until_expiration : 0,
+              isResolving: typeof r.is_resolving === 'boolean' ? r.is_resolving : true,
+              nameservers: Array.isArray(r.nameservers) ? r.nameservers : [],
+              dnsIps: Array.isArray(r.dns_ips) ? r.dns_ips : [],
+              portfolio: r.portfolio || 'Core Infrastructure',
+              assignedEmployees: Array.isArray(r.assigned_employees) ? r.assigned_employees : [],
+              lastCheckedAt: r.last_checked_at || new Date().toISOString(),
+              renewalAlerts: r.renewal_alerts || {},
+              notes: r.notes || '',
+              whoisSource: r.whois_source || '',
+              httpStatusCode: r.http_status_code ?? null,
+              httpStatusText: r.http_status_text ?? null,
+              httpLatencyMs: r.http_latency_ms ?? null,
+            }));
+
+            return new Response(
+              JSON.stringify({
+                success: true,
+                domains: formatted,
+                userId: targetUserId,
+                source: 'supabase_database',
+              }),
+              {
+                headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+              }
+            );
+          }
         }
       } catch (err) {
-        console.warn('Supabase edge domain fetch note:', err);
+        console.warn('Supabase edge database fetch note:', err);
       }
     }
 
@@ -98,26 +137,54 @@ export async function onRequestPost(context: any) {
     const userId = (body.userId || body.id || '').trim();
     const userEmail = (body.email || body.userEmail || '').toLowerCase().trim();
 
-    // 1. Supabase integration (if configured)
+    // 1. Supabase Database integration (upserts into public.domains linked to auth.uid())
     const supabaseUrl = (env?.SUPABASE_URL || env?.VITE_SUPABASE_URL || '').trim();
     const supabaseKey = (env?.SUPABASE_ANON_KEY || env?.VITE_SUPABASE_ANON_KEY || '').trim();
 
-    if (supabaseUrl && supabaseKey && authHeader.startsWith('Bearer ')) {
-      const token = authHeader.replace('Bearer ', '').trim();
+    if (supabaseUrl && supabaseKey && (authHeader.startsWith('Bearer ') || userId)) {
+      const token = authHeader.startsWith('Bearer ') ? authHeader.replace('Bearer ', '').trim() : '';
+      const targetUserId = userId || '';
       try {
-        await fetch(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/user`, {
-          method: 'PUT',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            apikey: supabaseKey,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            data: { saved_domains: domains },
-          }),
-        });
+        const rows = domains.map((d: any) => ({
+          id: String(d.id),
+          user_id: targetUserId,
+          domain: d.domain,
+          company: d.company || '',
+          working_status: d.workingStatus || 'active',
+          registrar: d.registrar || '',
+          registrar_portal_url: d.registrarPortalUrl || '',
+          expiration_date: d.expirationDate || '',
+          registration_date: d.registrationDate || '',
+          days_until_expiration: typeof d.daysUntilExpiration === 'number' ? d.daysUntilExpiration : 0,
+          is_resolving: Boolean(d.isResolving),
+          nameservers: d.nameservers || [],
+          dns_ips: d.dnsIps || [],
+          portfolio: d.portfolio || 'Core Infrastructure',
+          assigned_employees: d.assignedEmployees || [],
+          last_checked_at: d.lastCheckedAt || new Date().toISOString(),
+          renewal_alerts: d.renewalAlerts || {},
+          notes: d.notes || '',
+          whois_source: d.whoisSource || '',
+          http_status_code: d.httpStatusCode ?? null,
+          http_status_text: d.httpStatusText ?? null,
+          http_latency_ms: d.httpLatencyMs ?? null,
+          updated_at: new Date().toISOString(),
+        }));
+
+        if (rows.length > 0) {
+          await fetch(`${supabaseUrl.replace(/\/$/, '')}/rest/v1/domains`, {
+            method: 'POST',
+            headers: {
+              apikey: supabaseKey,
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+              'Content-Type': 'application/json',
+              Prefer: 'resolution=merge-duplicates',
+            },
+            body: JSON.stringify(rows),
+          });
+        }
       } catch (e) {
-        console.warn('Supabase save error:', e);
+        console.warn('Supabase edge database save error:', e);
       }
     }
 

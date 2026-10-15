@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import {
   getSupabaseClient,
   getSupabaseConfig,
+  crossSubdomainStorage,
 } from '../lib/supabase';
 import {
   clientLogin,
@@ -48,7 +49,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<AuthUser | null>(null);
   const [token, setToken] = useState<string | null>(() => {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem(TOKEN_KEY);
+      return crossSubdomainStorage.getItem(TOKEN_KEY) || localStorage.getItem(TOKEN_KEY);
     }
     return null;
   });
@@ -82,7 +83,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             };
             setUser(authUser);
             setToken(session.access_token);
-            localStorage.setItem(TOKEN_KEY, session.access_token);
+            crossSubdomainStorage.setItem(TOKEN_KEY, session.access_token);
             setLoading(false);
           }
 
@@ -103,7 +104,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               };
               setUser(authUser);
               setToken(session.access_token);
-              localStorage.setItem(TOKEN_KEY, session.access_token);
+              crossSubdomainStorage.setItem(TOKEN_KEY, session.access_token);
+            } else if (_event === 'SIGNED_OUT') {
+              setUser(null);
+              setToken(null);
+              crossSubdomainStorage.removeItem(TOKEN_KEY);
             }
           });
           authSubscription = subscription;
@@ -113,7 +118,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       // 2. If no user resolved yet from Supabase, check stored token / backend
-      const storedToken = localStorage.getItem(TOKEN_KEY);
+      const storedToken = crossSubdomainStorage.getItem(TOKEN_KEY) || (typeof window !== 'undefined' ? localStorage.getItem(TOKEN_KEY) : null);
       if (storedToken && mounted && !user) {
         let serverSessionChecked = false;
         try {
@@ -199,7 +204,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           role: data.user.role || 'owner',
           createdAt: data.user.created_at,
         };
-        localStorage.setItem(TOKEN_KEY, data.session.access_token);
+        crossSubdomainStorage.setItem(TOKEN_KEY, data.session.access_token);
         setToken(data.session.access_token);
         setUser(authUser);
 
@@ -228,7 +233,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
 
         if (data.token && data.user) {
-          localStorage.setItem(TOKEN_KEY, data.token);
+          crossSubdomainStorage.setItem(TOKEN_KEY, data.token);
           setToken(data.token);
           setUser(data.user);
         }
@@ -319,7 +324,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 role: 'owner',
                 createdAt: loginRes.data.user.created_at,
               };
-              localStorage.setItem(TOKEN_KEY, loginRes.data.session.access_token);
+              crossSubdomainStorage.setItem(TOKEN_KEY, loginRes.data.session.access_token);
               setToken(loginRes.data.session.access_token);
               setUser(authUser);
               return {
@@ -360,7 +365,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
 
         const sessionToken = data.session?.access_token || `token_sb_${Date.now()}`;
-        localStorage.setItem(TOKEN_KEY, sessionToken);
+        crossSubdomainStorage.setItem(TOKEN_KEY, sessionToken);
         setToken(sessionToken);
         setUser(authUser);
 
@@ -388,7 +393,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
 
         if (data.token && data.user) {
-          localStorage.setItem(TOKEN_KEY, data.token);
+          crossSubdomainStorage.setItem(TOKEN_KEY, data.token);
           setToken(data.token);
           setUser(data.user);
         }
@@ -549,7 +554,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = async () => {
-    const activeToken = token || localStorage.getItem(TOKEN_KEY);
+    const activeToken = token || crossSubdomainStorage.getItem(TOKEN_KEY) || (typeof window !== 'undefined' ? localStorage.getItem(TOKEN_KEY) : null);
 
     const client = getSupabaseClient();
     if (client) {
@@ -572,7 +577,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     clientLogout();
-    localStorage.removeItem(TOKEN_KEY);
+    crossSubdomainStorage.removeItem(TOKEN_KEY);
     setUser(null);
     setToken(null);
   };

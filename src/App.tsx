@@ -166,7 +166,7 @@ function MainApplication() {
     const timer = setInterval(() => {
       setDomains((prev) => {
         const recalculated = recalculateDaysUntilExpiration(prev);
-        saveDomains(recalculated);
+        saveDomains(recalculated, user?.id);
 
         // Continuous alert evaluation: check if critical domains exist
         const criticalDomains = recalculated.filter(
