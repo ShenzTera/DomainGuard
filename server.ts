@@ -25,6 +25,8 @@ import {
   setActiveTelegramDestination,
   getUserDomains,
   saveUserDomains,
+  getUserSettings,
+  saveUserSettings,
   UserRecord,
 } from './src/server/authStore.ts';
 
@@ -669,6 +671,43 @@ app.put('/api/domains', optionalAuth, (req: any, res) => {
     success: true,
     message: `Updated ${domains.length} domains in user account.`,
     count: domains.length,
+  });
+});
+
+// Get user account alert and team settings (for cross-computer syncing)
+app.get('/api/user/settings', optionalAuth, (req: any, res) => {
+  const userId = req.user?.id || (req.query.userId as string);
+  const userEmail = req.user?.email || (req.query.userEmail as string);
+
+  if (!userId && !userEmail) {
+    return res.status(401).json({ error: 'Authentication or userId required to fetch settings.' });
+  }
+
+  const saved = getUserSettings(userId, userEmail);
+  return res.json({
+    success: true,
+    userId: userId || req.user?.id,
+    settings: saved || null,
+  });
+});
+
+// Save or sync user account alert and team settings
+app.post('/api/user/settings', optionalAuth, (req: any, res) => {
+  const userId = req.user?.id || req.body.userId || (req.query.userId as string);
+  const userEmail = req.user?.email || req.body.userEmail || (req.query.userEmail as string);
+  const settings = req.body.settings;
+
+  if (!userId && !userEmail) {
+    return res.status(401).json({ error: 'Authentication or userId required to save settings.' });
+  }
+
+  if (settings) {
+    saveUserSettings(userId || userEmail, settings, userEmail);
+  }
+
+  return res.json({
+    success: true,
+    message: 'User account settings saved successfully.',
   });
 });
 

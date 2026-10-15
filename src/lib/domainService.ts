@@ -301,12 +301,19 @@ export function saveDomains(domains: DomainItem[], userId?: string | null): void
 }
 
 // Fetch saved domains for user account from backend (accessible from any computer)
-export async function fetchAccountDomains(userId?: string | null, token?: string | null): Promise<DomainItem[] | null> {
+export async function fetchAccountDomains(
+  userId?: string | null,
+  token?: string | null,
+  userEmail?: string | null
+): Promise<DomainItem[] | null> {
   const activeToken = token || (typeof window !== 'undefined' ? localStorage.getItem('domainguard_auth_token') : null);
-  const userParam = userId ? `?userId=${encodeURIComponent(userId)}` : '';
+  const params = new URLSearchParams();
+  if (userId) params.append('userId', userId);
+  if (userEmail) params.append('userEmail', userEmail);
+  const queryStr = params.toString() ? `?${params.toString()}` : '';
 
   try {
-    const res = await fetch(`/api/domains${userParam}`, {
+    const res = await fetch(`/api/domains${queryStr}`, {
       headers: {
         ...(activeToken ? { Authorization: `Bearer ${activeToken}` } : {}),
       },
@@ -316,7 +323,7 @@ export async function fetchAccountDomains(userId?: string | null, token?: string
     if (res.ok && contentType.includes('application/json')) {
       const data = await res.json();
       if (Array.isArray(data.domains)) {
-        // Cache to local storage
+        // Cache to local storage if domains exist
         if (data.domains.length > 0) {
           saveDomains(data.domains, userId);
         }
@@ -331,23 +338,90 @@ export async function fetchAccountDomains(userId?: string | null, token?: string
 }
 
 // Persist saved domains to user account on backend (accessible from any computer)
-export async function syncAccountDomains(domains: DomainItem[], userId?: string | null, token?: string | null): Promise<void> {
+export async function syncAccountDomains(
+  domains: DomainItem[],
+  userId?: string | null,
+  token?: string | null,
+  userEmail?: string | null
+): Promise<boolean> {
   // Always cache locally first for immediate responsiveness
   saveDomains(domains, userId);
 
   const activeToken = token || (typeof window !== 'undefined' ? localStorage.getItem('domainguard_auth_token') : null);
 
   try {
-    await fetch('/api/domains', {
+    const res = await fetch('/api/domains', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         ...(activeToken ? { Authorization: `Bearer ${activeToken}` } : {}),
       },
-      body: JSON.stringify({ domains, userId }),
+      body: JSON.stringify({ domains, userId, userEmail }),
     });
+    return res.ok;
   } catch (err) {
     console.warn('Background domain sync note:', err);
+    return false;
+  }
+}
+
+// Fetch saved settings for user account from backend (accessible from any computer)
+export async function fetchAccountSettings(
+  userId?: string | null,
+  token?: string | null,
+  userEmail?: string | null
+): Promise<AlertSettings | null> {
+  const activeToken = token || (typeof window !== 'undefined' ? localStorage.getItem('domainguard_auth_token') : null);
+  const params = new URLSearchParams();
+  if (userId) params.append('userId', userId);
+  if (userEmail) params.append('userEmail', userEmail);
+  const queryStr = params.toString() ? `?${params.toString()}` : '';
+
+  try {
+    const res = await fetch(`/api/user/settings${queryStr}`, {
+      headers: {
+        ...(activeToken ? { Authorization: `Bearer ${activeToken}` } : {}),
+      },
+    });
+
+    const contentType = res.headers.get('content-type') || '';
+    if (res.ok && contentType.includes('application/json')) {
+      const data = await res.json();
+      if (data.settings && typeof data.settings === 'object') {
+        saveSettings(data.settings, userId);
+        return data.settings;
+      }
+    }
+  } catch (err) {
+    console.warn('Could not fetch settings from remote server account:', err);
+  }
+
+  return null;
+}
+
+// Persist saved settings to user account on backend (accessible from any computer)
+export async function syncAccountSettings(
+  settings: AlertSettings,
+  userId?: string | null,
+  token?: string | null,
+  userEmail?: string | null
+): Promise<boolean> {
+  saveSettings(settings, userId);
+  const activeToken = token || (typeof window !== 'undefined' ? localStorage.getItem('domainguard_auth_token') : null);
+
+  try {
+    const res = await fetch('/api/user/settings', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(activeToken ? { Authorization: `Bearer ${activeToken}` } : {}),
+      },
+      body: JSON.stringify({ settings, userId, userEmail }),
+    });
+    return res.ok;
+  } catch (err) {
+    console.warn('Background settings sync note:', err);
+    return false;
   }
 }
 

@@ -11,6 +11,7 @@ const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json');
 const SETTINGS_FILE = path.join(DATA_DIR, 'server_settings.json');
 const DOMAINS_FILE = path.join(DATA_DIR, 'user_domains.json');
+const USER_SETTINGS_FILE = path.join(DATA_DIR, 'user_settings.json');
 
 export interface UserRecord {
   id: string;
@@ -61,6 +62,7 @@ let passwordResetsMap = new Map<string, PasswordResetRecord>(); // token/code ->
 let telegramPendingLinks = new Map<string, TelegramPendingLink>(); // userId -> pending link
 let knownTelegramChats = new Map<string, KnownTelegramChat>(); // chatId -> KnownTelegramChat
 let userDomainsMap = new Map<string, any[]>(); // userId/email -> DomainItem[]
+let userSettingsMap = new Map<string, any>(); // userId/email -> Settings
 
 let serverTelegramBotToken: string = process.env.TELEGRAM_BOT_TOKEN || '';
 let serverDefaultTelegramChatId: string = process.env.TELEGRAM_CHAT_ID || '';
@@ -82,6 +84,19 @@ function persistUserDomains() {
     fs.writeFileSync(DOMAINS_FILE, JSON.stringify(obj, null, 2), 'utf-8');
   } catch (err) {
     console.error('Failed to persist user domains:', err);
+  }
+}
+
+function persistUserSettings() {
+  try {
+    ensureDataDir();
+    const obj: Record<string, any> = {};
+    for (const [key, val] of userSettingsMap.entries()) {
+      obj[key] = val;
+    }
+    fs.writeFileSync(USER_SETTINGS_FILE, JSON.stringify(obj, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Failed to persist user settings:', err);
   }
 }
 
@@ -258,6 +273,23 @@ export function initAuthStore() {
       }
     } catch (err) {
       console.warn('Error reading user domains file:', err);
+    }
+  }
+
+  // Load user saved alert/team settings
+  if (fs.existsSync(USER_SETTINGS_FILE)) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(USER_SETTINGS_FILE, 'utf-8'));
+      if (parsed && typeof parsed === 'object') {
+        userSettingsMap.clear();
+        for (const [key, val] of Object.entries(parsed)) {
+          if (val && typeof val === 'object') {
+            userSettingsMap.set(key, val);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Error reading user settings file:', err);
     }
   }
 }
@@ -707,20 +739,59 @@ export function getAllUsers(): UserRecord[] {
 }
 
 export function getUserDomains(userId: string, userEmail?: string): any[] | null {
-  if (userDomainsMap.has(userId)) {
-    return userDomainsMap.get(userId)!;
+  const user = (userId ? usersById.get(userId) : null) || (userEmail ? usersMap.get(userEmail.toLowerCase()) : null);
+  const targetId = user?.id || userId;
+  const targetEmail = user?.email?.toLowerCase() || (userEmail ? userEmail.toLowerCase() : null);
+
+  if (targetId && userDomainsMap.has(targetId)) {
+    return userDomainsMap.get(targetId)!;
   }
-  if (userEmail && userDomainsMap.has(userEmail.toLowerCase())) {
-    return userDomainsMap.get(userEmail.toLowerCase())!;
+  if (targetEmail && userDomainsMap.has(targetEmail)) {
+    return userDomainsMap.get(targetEmail)!;
   }
   return null;
 }
 
 export function saveUserDomains(userId: string, domains: any[], userEmail?: string): void {
   if (!Array.isArray(domains)) return;
-  userDomainsMap.set(userId, domains);
-  if (userEmail) {
-    userDomainsMap.set(userEmail.toLowerCase(), domains);
+  const user = usersById.get(userId) || (userEmail ? usersMap.get(userEmail.toLowerCase()) : null);
+  const canonicalId = user?.id || userId;
+  const canonicalEmail = user?.email?.toLowerCase() || (userEmail ? userEmail.toLowerCase() : null);
+
+  if (canonicalId) {
+    userDomainsMap.set(canonicalId, domains);
+  }
+  if (canonicalEmail) {
+    userDomainsMap.set(canonicalEmail, domains);
   }
   persistUserDomains();
+}
+
+export function getUserSettings(userId: string, userEmail?: string): any | null {
+  const user = (userId ? usersById.get(userId) : null) || (userEmail ? usersMap.get(userEmail.toLowerCase()) : null);
+  const targetId = user?.id || userId;
+  const targetEmail = user?.email?.toLowerCase() || (userEmail ? userEmail.toLowerCase() : null);
+
+  if (targetId && userSettingsMap.has(targetId)) {
+    return userSettingsMap.get(targetId)!;
+  }
+  if (targetEmail && userSettingsMap.has(targetEmail)) {
+    return userSettingsMap.get(targetEmail)!;
+  }
+  return null;
+}
+
+export function saveUserSettings(userId: string, settings: any, userEmail?: string): void {
+  if (!settings || typeof settings !== 'object') return;
+  const user = usersById.get(userId) || (userEmail ? usersMap.get(userEmail.toLowerCase()) : null);
+  const canonicalId = user?.id || userId;
+  const canonicalEmail = user?.email?.toLowerCase() || (userEmail ? userEmail.toLowerCase() : null);
+
+  if (canonicalId) {
+    userSettingsMap.set(canonicalId, settings);
+  }
+  if (canonicalEmail) {
+    userSettingsMap.set(canonicalEmail, settings);
+  }
+  persistUserSettings();
 }

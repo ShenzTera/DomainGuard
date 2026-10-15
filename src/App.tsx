@@ -30,10 +30,15 @@ import {
   fetchDomainWhois,
   checkWebsiteHttpStatus,
   dispatchAutomatedAlerts,
+  fetchAccountDomains,
+  syncAccountDomains,
+  fetchAccountSettings,
+  syncAccountSettings,
+  INITIAL_DOMAINS,
 } from './lib/domainService';
 
 function MainApplication() {
-  const { user, loading } = useAuth();
+  const { user, token, loading } = useAuth();
   const { isDark, toggle: toggleTheme } = useDarkMode();
 
   const [currentTab, setCurrentTab] = useState<NavTab>('dashboard');
@@ -62,33 +67,96 @@ function MainApplication() {
     }
   }, []);
 
-  // Load initial data isolated to the authenticated user
+  const [cloudSyncStatus, setCloudSyncStatus] = useState<'synced' | 'syncing' | 'offline'>('synced');
+
+  // Load initial data isolated to the authenticated user and sync with cloud account
   useEffect(() => {
     if (!user) return;
-    const loadedDomains = loadDomains(user.id);
-    setDomains(loadedDomains);
+    const localDomains = loadDomains(user.id);
+    setDomains(localDomains);
     setSettings(loadSettings(user.id, user.email));
     setNotifications(loadNotifications(user.id));
     setTeamMembers(loadTeam(user.id));
 
-    // Auto-sync real registry dates if any domain has outdated placeholder days
-    if (loadedDomains && loadedDomains.length > 0) {
-      const hasDefaulted = loadedDomains.some(
-        (d) => d.daysUntilExpiration === 90 || d.daysUntilExpiration === 84 || !d.expirationDate
-      );
-      if (hasDefaulted) {
-        setTimeout(() => {
-          handleRefreshAll();
-        }, 500);
-      }
-    }
-  }, [user?.id, user?.email]);
+    let isMounted = true;
+    setCloudSyncStatus('syncing');
 
-  // Sync domains to storage whenever modified
+    // Fetch cloud domains from server for cross-computer synchronization
+    fetchAccountDomains(user.id, token, user.email)
+      .then((serverDomains) => {
+        if (!isMounted) return;
+
+        if (serverDomains && serverDomains.length > 0) {
+          // Cloud has stored domains for this account: populate state and local storage
+          setDomains(serverDomains);
+          saveDomains(serverDomains, user.id);
+          setCloudSyncStatus('synced');
+
+          // Auto-sync real registry dates if any domain has outdated placeholder days
+          const hasDefaulted = serverDomains.some(
+            (d) => d.daysUntilExpiration === 90 || d.daysUntilExpiration === 84 || !d.expirationDate
+          );
+          if (hasDefaulted) {
+            setTimeout(() => {
+              handleRefreshAll();
+            }, 500);
+          }
+        } else if (localDomains && localDomains.length > 0) {
+          // Machine has local domains from previous session: auto-upload them to the cloud account now!
+          syncAccountDomains(localDomains, user.id, token, user.email)
+            .then((ok) => {
+              if (isMounted) setCloudSyncStatus(ok ? 'synced' : 'offline');
+            })
+            .catch(() => {
+              if (isMounted) setCloudSyncStatus('offline');
+            });
+        } else {
+          // Both are empty: if admin or demo, seed initial domains and sync to cloud
+          const isDemoOrAdmin =
+            user.id.includes('admin') ||
+            user.id.includes('demo') ||
+            user.email.includes('admin') ||
+            user.email.includes('demo');
+          if (isDemoOrAdmin) {
+            setDomains(INITIAL_DOMAINS);
+            saveDomains(INITIAL_DOMAINS, user.id);
+            syncAccountDomains(INITIAL_DOMAINS, user.id, token, user.email);
+          }
+          setCloudSyncStatus('synced');
+        }
+      })
+      .catch((err) => {
+        console.warn('Initial cloud sync error:', err);
+        if (isMounted) setCloudSyncStatus('offline');
+      });
+
+    // Also fetch saved alert/team settings from cloud account
+    fetchAccountSettings(user.id, token, user.email).then((cloudSettings) => {
+      if (isMounted && cloudSettings) {
+        setSettings(cloudSettings);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [user?.id, user?.email, token]);
+
+  // Sync domains to local storage and cloud server whenever modified
   const updateDomains = useCallback((newDomains: DomainItem[]) => {
     setDomains(newDomains);
     saveDomains(newDomains, user?.id);
-  }, [user?.id]);
+    if (user?.id) {
+      setCloudSyncStatus('syncing');
+      syncAccountDomains(newDomains, user.id, token, user.email)
+        .then((ok) => {
+          setCloudSyncStatus(ok ? 'synced' : 'offline');
+        })
+        .catch(() => {
+          setCloudSyncStatus('offline');
+        });
+    }
+  }, [user?.id, user?.email, token]);
 
   // Periodic automatic updates ticker & continuous alert scheduler
   useEffect(() => {
@@ -300,6 +368,32 @@ function MainApplication() {
   const handleSaveSettings = (newSettings: AlertSettings) => {
     setSettings(newSettings);
     saveSettings(newSettings, user?.id);
+    if (user?.id) {
+      syncAccountSettings(newSettings, user.id, token, user.email).catch((e) =>
+        console.warn('Sync settings error:', e)
+      );
+    }
+  };
+
+  const handleCloudSync = async () => {
+    if (!user) return;
+    setCloudSyncStatus('syncing');
+    try {
+      const serverDomains = await fetchAccountDomains(user.id, token, user.email);
+      if (serverDomains && serverDomains.length > 0) {
+        setDomains(serverDomains);
+        saveDomains(serverDomains, user.id);
+      } else if (domains.length > 0) {
+        await syncAccountDomains(domains, user.id, token, user.email);
+      }
+      setCloudSyncStatus('synced');
+    } catch {
+      setCloudSyncStatus('offline');
+    }
+  };
+
+  const handleLoadSamplePortfolio = () => {
+    updateDomains(INITIAL_DOMAINS);
   };
 
   const handleAddNotificationLog = (log: NotificationLog) => {
@@ -380,6 +474,9 @@ function MainApplication() {
             onToggleAlert2Days={handleToggleAlert2Days}
             settings={settings}
             lastUpdated={lastUpdated}
+            cloudSyncStatus={cloudSyncStatus}
+            onCloudSync={handleCloudSync}
+            onLoadSamplePortfolio={handleLoadSamplePortfolio}
           />
         )}
 

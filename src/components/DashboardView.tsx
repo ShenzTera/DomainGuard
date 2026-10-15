@@ -18,6 +18,8 @@ import {
   Filter,
   X,
   Globe,
+  CloudCheck,
+  Cloud,
 } from 'lucide-react';
 
 interface DashboardViewProps {
@@ -31,6 +33,9 @@ interface DashboardViewProps {
   onToggleAlert2Days: (id: string) => void;
   settings: AlertSettings;
   lastUpdated: Date;
+  cloudSyncStatus?: 'synced' | 'syncing' | 'offline';
+  onCloudSync?: () => void;
+  onLoadSamplePortfolio?: () => void;
 }
 
 type SortField = 'expiry' | 'domain' | 'company' | 'registrar' | 'statusCode';
@@ -48,6 +53,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onToggleAlert2Days,
   settings,
   lastUpdated,
+  cloudSyncStatus = 'synced',
+  onCloudSync,
+  onLoadSamplePortfolio,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedPortfolio, setSelectedPortfolio] = useState<string>('all');
@@ -171,6 +179,23 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <span>Last checked: {lastUpdated.toLocaleTimeString()}</span>
             <span aria-hidden="true">·</span>
             <span className="font-mono">Auto-sync {settings.autoRefreshIntervalMinutes}m</span>
+            <span aria-hidden="true">·</span>
+            {onCloudSync ? (
+              <button
+                type="button"
+                onClick={onCloudSync}
+                className="inline-flex items-center gap-1 font-medium transition-colors cursor-pointer text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300"
+                title="Your domains are synchronized to your account and accessible from any computer. Click to re-sync."
+              >
+                <CloudCheck className={`w-3.5 h-3.5 shrink-0 ${cloudSyncStatus === 'syncing' ? 'animate-pulse' : ''}`} />
+                <span>{cloudSyncStatus === 'syncing' ? 'Syncing...' : 'Cloud Synced'}</span>
+              </button>
+            ) : (
+              <span className="inline-flex items-center gap-1 font-medium text-emerald-600 dark:text-emerald-400">
+                <CloudCheck className="w-3.5 h-3.5 shrink-0" />
+                <span>Cloud Synced</span>
+              </span>
+            )}
           </div>
         </div>
 
@@ -490,17 +515,57 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <tbody className="divide-y divide-neutral-200 dark:divide-neutral-800">
               {filteredAndSortedDomains.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-12 text-center text-neutral-400 dark:text-neutral-500">
-                    <div className="flex flex-col items-center justify-center gap-2">
-                      <p>No domains found matching the current filters.</p>
-                      {metricFilter && (
+                  <td colSpan={7} className="px-4 py-12 text-center text-neutral-500 dark:text-neutral-400">
+                    <div className="flex flex-col items-center justify-center gap-2.5 max-w-md mx-auto">
+                      <div className="w-10 h-10 rounded-full bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center text-neutral-500">
+                        <Cloud className="w-5 h-5 text-neutral-500 dark:text-neutral-400" />
+                      </div>
+                      <div className="space-y-1">
+                        <p className="font-semibold text-neutral-900 dark:text-neutral-100 text-sm">
+                          {metricFilter || searchQuery || selectedPortfolio !== 'all'
+                            ? 'No domains matching current filters'
+                            : 'No tracked domains on this account yet'}
+                        </p>
+                        <p className="text-xs text-neutral-500 dark:text-neutral-400 leading-relaxed">
+                          {metricFilter || searchQuery || selectedPortfolio !== 'all'
+                            ? 'Try clearing your search query or metric filters to view all domains.'
+                            : 'If you tracked domains on another computer, open DomainGuard on that computer once so it uploads them to your cloud account, or start tracking domains below.'}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 pt-1 flex-wrap justify-center">
+                        {metricFilter && (
+                          <button
+                            type="button"
+                            onClick={() => setMetricFilter(null)}
+                            className="px-3 py-1.5 text-xs font-medium border border-neutral-200 dark:border-neutral-800 rounded hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors cursor-pointer"
+                          >
+                            Clear Filter
+                          </button>
+                        )}
                         <button
-                          onClick={() => setMetricFilter(null)}
-                          className="text-xs text-sky-600 dark:text-sky-400 hover:underline font-semibold"
+                          type="button"
+                          onClick={onOpenAddModal}
+                          className="px-3 py-1.5 text-xs font-semibold bg-neutral-900 hover:bg-neutral-800 dark:bg-white dark:hover:bg-neutral-100 text-white dark:text-neutral-900 rounded transition-colors cursor-pointer"
                         >
-                          Clear metric filter
+                          Add Domain
                         </button>
-                      )}
+                        <button
+                          type="button"
+                          onClick={onOpenImportModal}
+                          className="px-3 py-1.5 text-xs font-medium border border-neutral-200 dark:border-neutral-800 rounded hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors cursor-pointer"
+                        >
+                          Import CSV
+                        </button>
+                        {onLoadSamplePortfolio && (
+                          <button
+                            type="button"
+                            onClick={onLoadSamplePortfolio}
+                            className="px-3 py-1.5 text-xs font-medium text-neutral-600 dark:text-neutral-300 hover:underline cursor-pointer"
+                          >
+                            Load Sample Portfolio
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </td>
                 </tr>
