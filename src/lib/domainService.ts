@@ -1,8 +1,5 @@
 import { DomainItem, AlertSettings, NotificationLog, TeamMember } from '../types/domain';
-import {
-  fetchUserDomainsFromSupabase,
-  saveUserDomainsToSupabase,
-} from './supabaseDomainStorage';
+import { getSupabaseClient } from './supabase';
 
 // Clean up any legacy domain lists from browser localStorage
 if (typeof window !== 'undefined') {
@@ -330,51 +327,40 @@ export function saveDomains(domains: DomainItem[], userId?: string | null): void
  * Fetches saved domains for user account from Supabase database storage.
  * Automatically fetches items linked to the authenticated user's ID (auth.uid()).
  */
-export async function fetchAccountDomains(
-  userId?: string | null,
-  token?: string | null,
-  userEmail?: string | null
-): Promise<DomainItem[] | null> {
-  // 1. Direct Supabase Database Storage fetch filtered by auth.uid()
-  if (userId) {
-    try {
-      const sbDomains = await fetchUserDomainsFromSupabase(userId);
-      if (sbDomains !== null) {
-        saveDomains(sbDomains, userId);
-        return recalculateDaysUntilExpiration(sbDomains);
-      }
-    } catch (sbErr) {
-      console.warn('[DomainGuard] Supabase database fetch note:', sbErr);
-    }
+export async function fetchAccountDomains(userId: string, token: string, userEmail?: string) {
+  const supabase = getSupabaseClient();
+  if (!supabase || !userId) return [];
+
+  const { data, error } = await supabase
+    .from('domains')
+    .select('*')
+    .eq('user_id', userId);
+
+  if (error) {
+    console.warn('Supabase fetch error:', error.message);
+    return [];
   }
 
-  // 2. Fallback to API route (which also queries Supabase database)
-  const activeToken = token || (typeof window !== 'undefined' ? localStorage.getItem('domainguard_auth_token') : null);
-  const params = new URLSearchParams();
-  if (userId) params.append('userId', userId);
-  if (userEmail) params.append('userEmail', userEmail);
-  const queryStr = params.toString() ? `?${params.toString()}` : '';
+  const formatted = (data || []).map((r: any) => ({
+    id: String(r.id),
+    domain: String(r.domain || ''),
+    company: r.company || '',
+    workingStatus: r.working_status || 'active',
+    registrar: r.registrar || '',
+    registrarPortalUrl: r.registrar_portal_url || '',
+    expirationDate: r.expiration_date || '',
+    daysUntilExpiration: r.days_until_expiration ?? 0,
+    isResolving: r.is_resolving ?? true,
+    nameservers: r.nameservers || [],
+    portfolio: r.portfolio || 'Core Infrastructure',
+    assignedEmployees: r.assigned_employees || [],
+    renewalAlerts: r.renewal_alerts || { warn30Days: true, continuousReminderEvery2Days: true },
+    notes: r.notes || '',
+    whoisSource: r.whois_source || '',
+    httpStatusCode: r.http_status_code ?? 200,
+  }));
 
-  try {
-    const res = await fetch(`/api/domains${queryStr}`, {
-      headers: {
-        ...(activeToken ? { Authorization: `Bearer ${activeToken}` } : {}),
-      },
-    });
-
-    const contentType = res.headers.get('content-type') || '';
-    if (res.ok && contentType.includes('application/json')) {
-      const data = await res.json();
-      if (Array.isArray(data.domains)) {
-        saveDomains(data.domains, userId);
-        return recalculateDaysUntilExpiration(data.domains);
-      }
-    }
-  } catch (err) {
-    console.warn('Could not sync domains from remote server account:', err);
-  }
-
-  return null;
+  return recalculateDaysUntilExpiration(formatted);
 }
 
 /**

@@ -11,6 +11,10 @@ import { EnterpriseTeamView } from './components/EnterpriseTeamView';
 import { AddDomainModal } from './components/AddDomainModal';
 import { ImportSheetsModal } from './components/ImportSheetsModal';
 import { WhoisDetailModal } from './components/WhoisDetailModal';
+import { SupabaseSchemaModal } from './components/SupabaseSchemaModal';
+import { CronWorkerModal } from './components/CronWorkerModal';
+import { ExpiryCalendarModal } from './components/ExpiryCalendarModal';
+import { SettingsApisModal } from './components/SettingsApisModal';
 import {
   DomainItem,
   AlertSettings,
@@ -41,7 +45,7 @@ function MainApplication() {
   const { user, token, loading } = useAuth();
   const { isDark, toggle: toggleTheme } = useDarkMode();
 
-  const [currentTab, setCurrentTab] = useState<NavTab>('dashboard');
+  const [currentTab, setCurrentTab] = useState<NavTab>('overview');
   const [domains, setDomains] = useState<DomainItem[]>([]);
   const [settings, setSettings] = useState<AlertSettings>(loadSettings());
   const [notifications, setNotifications] = useState<NotificationLog[]>([]);
@@ -55,6 +59,10 @@ function MainApplication() {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [selectedDomainForDetails, setSelectedDomainForDetails] = useState<DomainItem | null>(null);
   const [isPublicLookupOpen, setIsPublicLookupOpen] = useState(false);
+  const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState(false);
+  const [isCronModalOpen, setIsCronModalOpen] = useState(false);
+  const [isCalendarModalOpen, setIsCalendarModalOpen] = useState(false);
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
 
   // Check URL on initial load for direct lookup deep-link
   useEffect(() => {
@@ -448,12 +456,32 @@ function MainApplication() {
   const nearExpiryCount = domains.filter((d) => d.daysUntilExpiration <= 30).length;
   const employeeEmails = teamMembers.map((m) => m.email);
 
+  const handleTabSelect = (tab: NavTab) => {
+    if (tab === 'calendar') {
+      setIsCalendarModalOpen(true);
+      return;
+    }
+    if (tab === 'supabase') {
+      setIsSupabaseModalOpen(true);
+      return;
+    }
+    if (tab === 'cron') {
+      setIsCronModalOpen(true);
+      return;
+    }
+    if (tab === 'settings') {
+      setIsSettingsModalOpen(true);
+      return;
+    }
+    setCurrentTab(tab);
+  };
+
   return (
     <div className="min-h-screen bg-[#F3F4F8] dark:bg-[#0B0E23] text-[#101432] dark:text-[#F3F4F8] flex flex-col transition-colors duration-200">
-      {/* 240px Ink Sidebar Navigation */}
+      {/* 240px Left Sidebar Navigation matching attachment image_1d7b252a.png */}
       <TopNavigation
         currentTab={currentTab}
-        onSelectTab={setCurrentTab}
+        onSelectTab={handleTabSelect}
         isDark={isDark}
         onToggleTheme={toggleTheme}
         trackedCount={domains.length}
@@ -464,7 +492,7 @@ function MainApplication() {
       {/* Fluid Main View Area (offset by 240px on lg screens) */}
       <div className="flex-1 flex flex-col min-w-0 lg:pl-[240px]">
         <main className="flex-1 w-full max-w-7xl mx-auto p-4 sm:p-6 lg:p-10">
-          {currentTab === 'dashboard' && (
+          {(currentTab === 'overview' || currentTab === 'domains') && (
             <DashboardView
               domains={domains}
               onOpenAddModal={() => setIsAddModalOpen(true)}
@@ -529,6 +557,30 @@ function MainApplication() {
         domain={selectedDomainForDetails}
         onClose={() => setSelectedDomainForDetails(null)}
         onToggleAlert2Days={handleToggleAlert2Days}
+      />
+
+      <SupabaseSchemaModal
+        isOpen={isSupabaseModalOpen}
+        onClose={() => setIsSupabaseModalOpen(false)}
+      />
+
+      <CronWorkerModal
+        isOpen={isCronModalOpen}
+        onClose={() => setIsCronModalOpen(false)}
+      />
+
+      <ExpiryCalendarModal
+        isOpen={isCalendarModalOpen}
+        onClose={() => setIsCalendarModalOpen(false)}
+        domains={domains}
+        onSelectDomain={(d) => setSelectedDomainForDetails(d)}
+      />
+
+      <SettingsApisModal
+        isOpen={isSettingsModalOpen}
+        onClose={() => setIsSettingsModalOpen(false)}
+        settings={settings}
+        onSaveSettings={handleSaveSettings}
       />
     </div>
   );

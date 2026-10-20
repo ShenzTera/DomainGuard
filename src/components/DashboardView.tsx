@@ -442,50 +442,50 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       {/* ============================================================ */}
       <div className="rounded-[14px] border border-[#E2E4EE] dark:border-[#1F2756] bg-white dark:bg-[#101432] shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-[13px] min-w-[900px]">
+          <table className="w-full text-left text-[13px] min-w-[1080px]">
             {/* Table Header: Ink #101432 with DM Mono uppercase labels */}
             <thead className="bg-[#101432] text-white font-mono text-[11px] uppercase tracking-[0.05em] border-b border-[#1B2050]">
               <tr>
-                <th className="px-5 py-3.5 cursor-pointer select-none" onClick={() => handleSortToggle('domain')}>
+                <th className="px-5 py-3.5 cursor-pointer select-none min-w-[250px]" onClick={() => handleSortToggle('domain')}>
                   <div className="flex items-center gap-1.5 text-white/90">
                     <span>DOMAIN</span>
                     <ArrowUpDown className="w-3 h-3 text-white/50" />
                   </div>
                 </th>
 
-                <th className="px-4 py-3.5 cursor-pointer select-none" onClick={() => handleSortToggle('company')}>
+                <th className="px-4 py-3.5 cursor-pointer select-none min-w-[160px]" onClick={() => handleSortToggle('company')}>
                   <div className="flex items-center gap-1.5 text-white/90">
-                    <span>ENTITY / PORTFOLIO</span>
+                    <span>PORTFOLIO &amp; OWNER</span>
                     <ArrowUpDown className="w-3 h-3 text-white/50" />
                   </div>
                 </th>
 
-                <th className="px-4 py-3.5 cursor-pointer select-none" onClick={() => handleSortToggle('statusCode')}>
+                <th className="px-4 py-3.5 cursor-pointer select-none min-w-[160px]" onClick={() => handleSortToggle('statusCode')}>
                   <div className="flex items-center gap-1.5 text-white/90">
                     <span>HTTP &amp; LATENCY</span>
                     <ArrowUpDown className="w-3 h-3 text-white/50" />
                   </div>
                 </th>
 
-                <th className="px-4 py-3.5 cursor-pointer select-none" onClick={() => handleSortToggle('registrar')}>
+                <th className="px-4 py-3.5 cursor-pointer select-none min-w-[160px]" onClick={() => handleSortToggle('registrar')}>
                   <div className="flex items-center gap-1.5 text-white/90">
                     <span>REGISTRAR / DNS</span>
                     <ArrowUpDown className="w-3 h-3 text-white/50" />
                   </div>
                 </th>
 
-                <th className="px-5 py-3.5 cursor-pointer select-none bg-[#1B2050]" onClick={() => handleSortToggle('expiry')}>
+                <th className="px-5 py-3.5 cursor-pointer select-none bg-[#1B2050] min-w-[220px] whitespace-nowrap" onClick={() => handleSortToggle('expiry')}>
                   <div className="flex items-center gap-1.5 text-[#D6F24B] font-bold">
                     <span>EXPIRY (PRIORITY)</span>
                     <ArrowUpDown className="w-3 h-3 text-[#D6F24B]" />
                   </div>
                 </th>
 
-                <th className="px-4 py-3.5 text-right text-white/90">
+                <th className="px-4 py-3.5 text-right text-white/90 min-w-[130px] whitespace-nowrap">
                   <span>ACTION</span>
                 </th>
 
-                <th className="px-3 py-3.5 text-right">
+                <th className="px-3 py-3.5 text-right w-14">
                   <span className="sr-only">Controls</span>
                 </th>
               </tr>
@@ -566,54 +566,69 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                           : 'hover:bg-[#F3F4F8]/70 dark:hover:bg-[#1B2050]/40'
                       }`}
                     >
-                      {/* Column 1: Domain (Typeset in DM Mono) */}
-                      <td className="px-5 py-4 align-middle">
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => onSelectDomainForDetails(domain)}
-                            className="font-mono font-semibold text-[#101432] dark:text-white hover:text-[#2A3AF0] text-left cursor-pointer truncate max-w-[220px] transition-colors"
-                            title="Open WHOIS & RDAP inspection modal"
-                          >
-                            {domain.domain}
-                          </button>
+                      {/* Column 1: Domain - Clean, uncluttered, professional */}
+                      <td className="px-5 py-4 align-middle min-w-[250px]">
+                        <div className="flex items-center gap-3">
+                          {/* Sleek brand initial avatar */}
+                          <div className="w-8 h-8 rounded-lg bg-sky-50 dark:bg-sky-950/60 text-[#0284c7] dark:text-sky-400 border border-sky-200/60 dark:border-sky-800/60 flex items-center justify-center font-mono font-bold text-xs uppercase shrink-0 shadow-2xs">
+                            {domain.domain.replace(/^(?:https?:\/\/)?(?:www\.)?/i, '').charAt(0)}
+                          </div>
 
-                          <a
-                            href={cleanDomainUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-[#5B6178] hover:text-[#2A3AF0] transition-colors p-1 shrink-0"
-                            title={`Open ${domain.domain} live site`}
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <ExternalLink className="w-3.5 h-3.5" />
-                          </a>
-                        </div>
-                        <div className="font-mono text-[11px] text-[#5B6178] mt-0.5">
-                          {domain.portfolio}
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => onSelectDomainForDetails(domain)}
+                                className="font-mono text-[13.5px] font-bold text-slate-900 dark:text-white hover:text-[#0284c7] transition-colors text-left cursor-pointer truncate"
+                                title="Open WHOIS & RDAP inspection modal"
+                              >
+                                {domain.domain}
+                              </button>
+
+                              <a
+                                href={cleanDomainUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-slate-400 hover:text-[#0284c7] transition-colors p-0.5 shrink-0"
+                                title={`Open ${domain.domain} live site`}
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <ExternalLink className="w-3.5 h-3.5" />
+                              </a>
+                            </div>
+
+                            {domain.company && (
+                              <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5 font-sans">
+                                {domain.company}
+                              </p>
+                            )}
+                          </div>
                         </div>
                       </td>
 
-                      {/* Column 2: Company / Org */}
-                      <td className="px-4 py-4 align-middle">
-                        <div className="font-medium text-[#101432] dark:text-white">
-                          {domain.company || 'Registry Protected'}
-                        </div>
-                        <div className="font-mono text-[11px] text-[#5B6178] truncate max-w-[160px] mt-0.5">
-                          {domain.assignedEmployees?.[0] || 'Unassigned'}
-                        </div>
+                      {/* Column 2: Portfolio & Assigned Owner */}
+                      <td className="px-4 py-4 align-middle min-w-[160px]">
+                        <span className="inline-block px-2.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-sans text-[11px] font-semibold border border-slate-200/60 dark:border-slate-700/60">
+                          {domain.portfolio || 'Core Infrastructure'}
+                        </span>
+                        {domain.assignedEmployees?.[0] && (
+                          <div className="font-mono text-[11px] text-slate-400 dark:text-slate-500 truncate max-w-[150px] mt-1">
+                            {domain.assignedEmployees[0]}
+                          </div>
+                        )}
                       </td>
 
                       {/* Column 3: HTTP & Latency (Monospaced data) */}
-                      <td className="px-4 py-4 align-middle font-mono">
+                      <td className="px-4 py-4 align-middle font-mono min-w-[160px]">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           {statusCode >= 300 && statusCode < 400 ? (
                             /* ultramarine-tint for redirect (3xx) pill */
-                            <span className="bg-[#E6E8FF] text-[#2A3AF0] text-[11px] font-mono font-medium px-2 py-0.5 rounded-full">
+                            <span className="bg-[#E6E8FF] text-[#2A3AF0] text-[11px] font-mono font-medium px-2 py-0.5 rounded-full whitespace-nowrap">
                               HTTP {statusCode}
                             </span>
                           ) : (
                             <span
-                              className={`text-[12px] font-semibold ${
+                              className={`text-[12px] font-semibold whitespace-nowrap ${
                                 isHttpOk ? 'text-[#0B7A57]' : 'text-[#D63A2C]'
                               }`}
                             >
@@ -622,7 +637,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                           )}
 
                           {domain.httpLatencyMs && (
-                            <span className="text-[11px] text-[#5B6178] tabular-nums">
+                            <span className="text-[11px] text-[#5B6178] tabular-nums whitespace-nowrap">
                               · {domain.httpLatencyMs}ms
                             </span>
                           )}
@@ -633,8 +648,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       </td>
 
                       {/* Column 4: Registrar & Nameservers (DM Mono) */}
-                      <td className="px-4 py-4 align-middle">
-                        <div className="font-medium text-[#101432] dark:text-white">
+                      <td className="px-4 py-4 align-middle min-w-[160px]">
+                        <div className="font-medium text-[#101432] dark:text-white truncate">
                           {domain.registrar || 'ICANN Registrar'}
                         </div>
                         <div className="font-mono text-[11px] text-[#5B6178] truncate max-w-[180px] mt-0.5">
@@ -642,27 +657,27 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         </div>
                       </td>
 
-                      {/* Column 5: Expiration (ONE LOUD THING PER ROW) */}
-                      <td className="px-5 py-4 align-middle font-mono">
-                        <div className="font-semibold text-[#101432] dark:text-white">
+                      {/* Column 5: Expiration (ONE WHOLE UNBROKEN BADGE - NO WRAPPING) */}
+                      <td className="px-5 py-4 align-middle font-mono whitespace-nowrap min-w-[220px]">
+                        <div className="font-bold text-slate-900 dark:text-white text-[13.5px]">
                           {domain.expirationDate || 'Pending RDAP'}
                         </div>
-                        <div className="mt-1">
+                        <div className="mt-1.5">
                           {isExpired ? (
-                            <span className="inline-block bg-[#D63A2C] text-white text-[11px] font-bold px-2 py-0.5 rounded-full">
+                            <span className="inline-flex items-center whitespace-nowrap px-3 py-1 rounded-full text-[11px] font-mono font-bold bg-[#D63A2C] text-white shadow-xs">
                               EXPIRED ({Math.abs(domain.daysUntilExpiration)}d ago)
                             </span>
                           ) : isCritical7d ? (
-                            <span className="inline-block bg-[#D63A2C] text-white text-[11px] font-bold px-2 py-0.5 rounded-full">
+                            <span className="inline-flex items-center whitespace-nowrap px-3 py-1 rounded-full text-[11px] font-mono font-bold bg-[#D63A2C] text-white shadow-xs">
                               {domain.daysUntilExpiration}d remaining (Critical)
                             </span>
                           ) : isWarning30d ? (
-                            <span className="inline-block bg-[#FFC21A] text-[#3D2800] text-[11px] font-bold px-2 py-0.5 rounded-full">
+                            <span className="inline-flex items-center whitespace-nowrap px-3 py-1 rounded-full text-[11px] font-mono font-bold bg-[#FFC21A] text-[#3D2800] shadow-xs">
                               {domain.daysUntilExpiration}d remaining (Act soon)
                             </span>
                           ) : (
-                            <span className="inline-block text-[#0B7A57] text-[11px] font-medium">
-                              {domain.daysUntilExpiration}d remaining
+                            <span className="inline-flex items-center whitespace-nowrap px-3 py-1 rounded-full text-[11px] font-mono font-semibold bg-emerald-50 dark:bg-emerald-950/40 text-[#0B7A57] dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/60">
+                              {domain.daysUntilExpiration}d remaining (Healthy)
                             </span>
                           )}
                         </div>
