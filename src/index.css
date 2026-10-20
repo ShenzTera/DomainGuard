@@ -5,15 +5,64 @@
 @layer base {
   :root {
     color-scheme: light;
+    --color-ink: #101432;
+    --color-ink-2: #1B2050;
+    --color-ground: #F3F4F8;
+    --color-surface: #FFFFFF;
+    --color-line: #E2E4EE;
+    --color-muted: #5B6178;
+    --color-ultramarine: #2A3AF0;
+    --color-ultramarine-tint: #E6E8FF;
+    --color-coral: #D63A2C;
+    --color-coral-tint: #FFF4F2;
+    --color-sun: #FFC21A;
+    --color-sun-tint: #FFF0C2;
+    --color-mint: #0B7A57;
+    --color-mint-fill: #0B9E6E;
+    --color-mint-tint: #D7F4E6;
+    --color-lime: #D6F24B;
   }
+
   :root.dark {
     color-scheme: dark;
+    --color-ink: #F3F4F8;
+    --color-ground: #0B0E23;
+    --color-surface: #101432;
+    --color-line: #1F2756;
+    --color-muted: #8E95AF;
+    --color-coral-tint: #2A141A;
+    --color-sun-tint: #2A2109;
+    --color-mint-tint: #0D261E;
   }
+
   body {
-    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-family: 'Instrument Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    color: #101432;
+    background-color: #F3F4F8;
+    font-size: 14px;
+    line-height: 1.5;
   }
+
+  .dark body {
+    color: #F3F4F8;
+    background-color: #0B0E23;
+  }
+
+  /* Display & Numerals: Bricolage Grotesque 800, tight tracking (-0.02em to -0.03em) */
+  .font-display {
+    font-family: 'Bricolage Grotesque', sans-serif;
+    font-weight: 800;
+    letter-spacing: -0.025em;
+  }
+
+  /* Body / UI: Instrument Sans */
+  .font-sans, .font-ui {
+    font-family: 'Instrument Sans', sans-serif;
+  }
+
+  /* Data / Meta / Ledger: DM Mono with uppercase tracked eyebrow styling */
   code, kbd, samp, pre, .font-mono {
-    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-family: 'DM Mono', monospace;
     font-variant-numeric: tabular-nums;
   }
 }
@@ -25,5 +74,90 @@
   .no-scrollbar {
     -ms-overflow-style: none;
     scrollbar-width: none;
+  }
+
+  /* DomainGuard Stat Card Numerals (52px Bricolage Grotesque 800) */
+  .stat-numeral {
+    font-family: 'Bricolage Grotesque', sans-serif;
+    font-size: 52px;
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: -0.03em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Mono Eyebrow Label: 11px uppercase, +0.05em tracking */
+  .eyebrow-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  /* DomainGuard Button System: 10px radius, 13px font, 2x horizontal padding */
+  .btn-ultramarine {
+    background-color: #2A3AF0;
+    color: #ffffff;
+    border-radius: 10px;
+    padding: 8px 16px;
+    font-family: 'Instrument Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    transition: all 0.15s ease-in-out;
+  }
+  .btn-ultramarine:hover {
+    background-color: #1E2BC4;
+    box-shadow: 0 4px 12px rgba(42, 58, 240, 0.25);
+  }
+
+  .btn-sun {
+    background-color: #FFC21A;
+    color: #3D2800;
+    border-radius: 10px;
+    padding: 8px 16px;
+    font-family: 'Instrument Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    transition: all 0.15s ease-in-out;
+  }
+  .btn-sun:hover {
+    background-color: #E5AC12;
+  }
+
+  .btn-coral {
+    background-color: #D63A2C;
+    color: #ffffff;
+    border-radius: 10px;
+    padding: 8px 16px;
+    font-family: 'Instrument Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    transition: all 0.15s ease-in-out;
+  }
+  .btn-coral:hover {
+    background-color: #B52B1E;
+  }
+
+  .btn-neutral-surface {
+    background-color: #FFFFFF;
+    color: #101432;
+    border: 1px solid #E2E4EE;
+    border-radius: 10px;
+    padding: 8px 16px;
+    font-family: 'Instrument Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 0.15s ease-in-out;
+  }
+  .btn-neutral-surface:hover {
+    background-color: #F8F9FC;
+    border-color: #CBD0E0;
+  }
+
+  .card-domain {
+    background-color: #FFFFFF;
+    border-radius: 14px;
+    border: 1px solid #E2E4EE;
   }
 }

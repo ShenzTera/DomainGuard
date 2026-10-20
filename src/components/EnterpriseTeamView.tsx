@@ -1,6 +1,15 @@
 import React, { useState } from 'react';
 import { TeamMember, PortfolioTag, DomainItem, UserRole } from '../types/domain';
-import { Users, UserPlus, Shield, FolderGit2, Mail, MessageSquare, Trash2, CheckCircle2, Building2, Plus, X } from 'lucide-react';
+import {
+  Users,
+  UserPlus,
+  Shield,
+  Building2,
+  Trash2,
+  Mail,
+  MessageSquare,
+  X,
+} from 'lucide-react';
 
 interface EnterpriseTeamViewProps {
   teamMembers: TeamMember[];
@@ -26,27 +35,33 @@ export const EnterpriseTeamView: React.FC<EnterpriseTeamViewProps> = ({
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [newEmail, setNewEmail] = useState('');
   const [newName, setNewName] = useState('');
-  const [newRole, setNewRole] = useState<UserRole>('monitor');
-  const [selectedPortfolios, setSelectedPortfolios] = useState<PortfolioTag[]>(['Core Infrastructure']);
+  const [newRole, setNewRole] = useState<UserRole>('admin');
+  const [selectedPortfolios, setSelectedPortfolios] = useState<PortfolioTag[]>([
+    'Core Infrastructure',
+  ]);
   const [emailAlerts, setEmailAlerts] = useState(true);
-  const [telegramAlerts, setTelegramAlerts] = useState(true);
+  const [telegramAlerts, setTelegramAlerts] = useState(false);
 
   const togglePortfolio = (tag: PortfolioTag) => {
-    setSelectedPortfolios((prev) =>
-      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
-    );
+    if (selectedPortfolios.includes(tag)) {
+      if (selectedPortfolios.length > 1) {
+        setSelectedPortfolios(selectedPortfolios.filter((t) => t !== tag));
+      }
+    } else {
+      setSelectedPortfolios([...selectedPortfolios, tag]);
+    }
   };
 
   const handleInvite = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newEmail.includes('@') || !newName.trim()) return;
+    if (!newEmail || !newName) return;
 
     const newMember: TeamMember = {
-      id: `team_${Date.now()}`,
-      email: newEmail.trim().toLowerCase(),
-      name: newName.trim(),
+      id: `usr_${Date.now()}`,
+      name: newName,
+      email: newEmail,
       role: newRole,
-      assignedPortfolios: selectedPortfolios.length > 0 ? selectedPortfolios : ['Core Infrastructure'],
+      assignedPortfolios: selectedPortfolios,
       receiveEmailAlerts: emailAlerts,
       receiveTelegramAlerts: telegramAlerts,
       addedAt: new Date().toISOString().split('T')[0],
@@ -60,23 +75,23 @@ export const EnterpriseTeamView: React.FC<EnterpriseTeamViewProps> = ({
   };
 
   return (
-    <div className="max-w-5xl mx-auto space-y-5 sm:space-y-6">
+    <div className="max-w-5xl mx-auto space-y-6">
       {/* Enterprise Organization Banner */}
-      <div className="border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 rounded p-4 sm:p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-start gap-3 sm:gap-4">
-          <div className="p-2.5 sm:p-3 rounded bg-neutral-100 dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200 shrink-0">
-            <Building2 className="w-5 h-5 sm:w-6 sm:h-6" />
+      <div className="border border-[#E2E4EE] dark:border-[#1F2756] bg-white dark:bg-[#101432] rounded-[14px] p-6 sm:p-7 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-5">
+        <div className="flex items-start gap-4">
+          <div className="p-3.5 rounded-[10px] bg-[#101432] text-[#D6F24B] shrink-0 font-bold border border-[#1B2050]">
+            <Building2 className="w-6 h-6" />
           </div>
           <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-base sm:text-lg font-bold text-neutral-900 dark:text-white">
-                Enterprise Central Dashboard
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <h1 className="font-display text-[26px] font-extrabold text-[#101432] dark:text-white leading-tight tracking-[-0.025em]">
+                Enterprise Portfolio &amp; Access Roster
               </h1>
-              <span className="px-2 py-0.5 bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 font-mono text-xs rounded font-medium">
-                Multi-Tenant Access
+              <span className="px-3 py-0.5 bg-[#E6E8FF] text-[#2A3AF0] rounded-full font-mono text-[11px] font-semibold">
+                Multi-Tenant Scopes
               </span>
             </div>
-            <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1 max-w-xl">
+            <p className="text-[14px] text-[#5B6178] mt-1.5 max-w-xl leading-relaxed">
               Grant scoped access to internal engineering, security, and brand teams to manage designated domain portfolios and monitor high-priority expiration alerts.
             </p>
           </div>
@@ -84,33 +99,33 @@ export const EnterpriseTeamView: React.FC<EnterpriseTeamViewProps> = ({
 
         <button
           onClick={() => setShowInviteModal(true)}
-          className="px-4 py-2 bg-neutral-900 hover:bg-neutral-800 dark:bg-white dark:hover:bg-neutral-100 text-white dark:text-neutral-900 text-xs font-semibold rounded flex items-center justify-center gap-1.5 transition-colors whitespace-nowrap self-stretch sm:self-start md:self-auto cursor-pointer"
+          className="btn-ultramarine flex items-center justify-center gap-2 whitespace-nowrap self-stretch sm:self-start md:self-auto cursor-pointer"
         >
-          <UserPlus className="w-3.5 h-3.5" />
-          <span>Grant Employee Access</span>
+          <UserPlus className="w-4 h-4" />
+          <span>Grant Member Access</span>
         </button>
       </div>
 
       {/* Portfolio Distribution Matrix */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 sm:gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
         {ALL_PORTFOLIOS.map((tag) => {
           const count = domains.filter((d) => d.portfolio === tag).length;
           const assignedMembers = teamMembers.filter((m) => m.assignedPortfolios.includes(tag)).length;
           return (
             <div
               key={tag}
-              className="p-3 sm:p-3.5 border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 rounded text-xs"
+              className="p-4 border border-[#E2E4EE] dark:border-[#1F2756] bg-white dark:bg-[#101432] rounded-[14px] text-xs shadow-xs hover:border-[#2A3AF0]/40 transition-colors"
             >
-              <div className="font-semibold text-neutral-900 dark:text-white truncate">
+              <div className="font-medium text-[#101432] dark:text-white truncate">
                 {tag}
               </div>
-              <div className="mt-2 flex items-baseline justify-between font-mono">
-                <span className="text-base sm:text-lg font-bold text-neutral-900 dark:text-white">
+              <div className="mt-2.5 flex items-baseline justify-between font-mono">
+                <span className="font-display text-2xl font-bold text-[#101432] dark:text-white tabular-nums">
                   {count}
                 </span>
-                <span className="text-[11px] text-neutral-400">domains</span>
+                <span className="eyebrow-label text-[#5B6178]">domains</span>
               </div>
-              <div className="mt-1 text-[11px] text-neutral-500 dark:text-neutral-400 truncate">
+              <div className="mt-1 text-[11px] text-[#5B6178] truncate font-mono">
                 {assignedMembers} lead{assignedMembers === 1 ? '' : 's'} assigned
               </div>
             </div>
@@ -119,63 +134,63 @@ export const EnterpriseTeamView: React.FC<EnterpriseTeamViewProps> = ({
       </div>
 
       {/* Employee & Access Roster */}
-      <div className="border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 rounded shadow-xs overflow-hidden">
-        <div className="px-4 sm:px-5 py-3.5 sm:py-4 border-b border-neutral-200 dark:border-neutral-800 flex items-center justify-between gap-2 flex-wrap">
-          <div className="flex items-center gap-2">
-            <Users className="w-4 h-4 text-neutral-500 shrink-0" />
-            <h2 className="text-xs sm:text-sm font-bold text-neutral-900 dark:text-white">
+      <div className="border border-[#E2E4EE] dark:border-[#1F2756] bg-white dark:bg-[#101432] rounded-[14px] shadow-xs overflow-hidden">
+        <div className="px-6 py-4 border-b border-[#E2E4EE] dark:border-[#1F2756] flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-2.5">
+            <Users className="w-4 h-4 text-[#2A3AF0] shrink-0" />
+            <h2 className="text-[15px] font-semibold text-[#101432] dark:text-white">
               Authorized Team Members &amp; Roles ({teamMembers.length})
             </h2>
           </div>
-          <span className="text-[11px] sm:text-xs text-neutral-400">Role-based Access Control (RBAC)</span>
+          <span className="eyebrow-label text-[#5B6178]">Role-based Access Control (RBAC)</span>
         </div>
 
-        <div className="overflow-x-auto touch-pan-x">
-          <table className="w-full text-left text-xs min-w-[640px]">
-            <thead className="bg-neutral-50 dark:bg-neutral-950 text-neutral-500 dark:text-neutral-400 font-semibold border-b border-neutral-200 dark:border-neutral-800">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-[13px] min-w-[640px]">
+            <thead className="bg-[#101432] text-white font-mono text-[11px] uppercase tracking-[0.05em] border-b border-[#1B2050]">
               <tr>
-                <th className="px-4 sm:px-5 py-3">Employee</th>
-                <th className="px-4 sm:px-5 py-3">Enterprise Role</th>
-                <th className="px-4 sm:px-5 py-3">Managed Portfolios</th>
-                <th className="px-4 sm:px-5 py-3">Active Alerts</th>
-                <th className="px-4 sm:px-5 py-3">Joined</th>
-                <th className="px-4 sm:px-5 py-3 text-right">Actions</th>
+                <th className="px-6 py-3.5">EMPLOYEE</th>
+                <th className="px-6 py-3.5">ROLE</th>
+                <th className="px-6 py-3.5">PORTFOLIOS</th>
+                <th className="px-6 py-3.5">ALERTS</th>
+                <th className="px-6 py-3.5">JOINED</th>
+                <th className="px-6 py-3.5 text-right">ACTIONS</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-neutral-200 dark:divide-neutral-800">
+            <tbody className="divide-y divide-[#E2E4EE] dark:divide-[#1F2756]">
               {teamMembers.map((member) => (
-                <tr key={member.id} className="hover:bg-neutral-50/50 dark:hover:bg-neutral-800/40">
-                  <td className="px-5 py-3.5">
-                    <div className="font-semibold text-neutral-900 dark:text-white">
+                <tr key={member.id} className="hover:bg-[#F3F4F8]/70 dark:hover:bg-[#1B2050]/40 transition-colors">
+                  <td className="px-6 py-4">
+                    <div className="font-semibold text-[#101432] dark:text-white">
                       {member.name}
                     </div>
-                    <div className="text-neutral-500 dark:text-neutral-400 font-mono text-[11px]">
+                    <div className="text-[#5B6178] font-mono text-[11px] mt-0.5">
                       {member.email}
                     </div>
                   </td>
 
-                  <td className="px-5 py-3.5">
+                  <td className="px-6 py-4">
                     <span
-                      className={`px-2 py-0.5 rounded font-mono text-[11px] font-semibold uppercase ${
+                      className={`px-2.5 py-0.5 rounded-full font-mono text-[11px] font-bold uppercase ${
                         member.role === 'owner'
-                          ? 'bg-purple-100 text-purple-800 dark:bg-purple-950/80 dark:text-purple-300'
+                          ? 'bg-[#FFF0C2] text-[#3D2800] border border-[#F5D56B]'
                           : member.role === 'admin'
-                          ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/80 dark:text-blue-300'
+                          ? 'bg-[#E6E8FF] text-[#2A3AF0]'
                           : member.role === 'monitor'
-                          ? 'bg-neutral-100 text-neutral-800 dark:bg-neutral-800 dark:text-neutral-200'
-                          : 'bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400'
+                          ? 'bg-[#D7F4E6] text-[#0B7A57]'
+                          : 'bg-[#F3F4F8] dark:bg-[#1B2050] text-[#5B6178]'
                       }`}
                     >
                       {member.role}
                     </span>
                   </td>
 
-                  <td className="px-5 py-3.5">
-                    <div className="flex flex-wrap gap-1">
+                  <td className="px-6 py-4">
+                    <div className="flex flex-wrap gap-1.5">
                       {member.assignedPortfolios.map((p) => (
                         <span
                           key={p}
-                          className="px-2 py-0.5 bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 rounded text-[11px]"
+                          className="px-2.5 py-0.5 bg-[#F3F4F8] dark:bg-[#1B2050] text-[#101432] dark:text-white border border-[#E2E4EE] dark:border-[#1F2756] rounded-full text-[11px] font-medium"
                         >
                           {p}
                         </span>
@@ -183,36 +198,39 @@ export const EnterpriseTeamView: React.FC<EnterpriseTeamViewProps> = ({
                     </div>
                   </td>
 
-                  <td className="px-5 py-3.5">
-                    <div className="flex items-center gap-2 text-neutral-600 dark:text-neutral-400">
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-2">
                       {member.receiveEmailAlerts && (
-                        <span title="Receives Email Alerts" className="flex items-center gap-1 text-[11px]">
-                          <Mail className="w-3 h-3 text-neutral-500" /> Email
+                        <span className="p-1.5 rounded-[6px] bg-[#E6E8FF] text-[#2A3AF0]" title="Email notifications active">
+                          <Mail className="w-3.5 h-3.5" />
                         </span>
                       )}
                       {member.receiveTelegramAlerts && (
-                        <span title="Receives Telegram Bot Alerts" className="flex items-center gap-1 text-[11px]">
-                          <MessageSquare className="w-3 h-3 text-sky-500" /> Telegram
+                        <span className="p-1.5 rounded-[6px] bg-[#D7F4E6] text-[#0B7A57]" title="Telegram alerts active">
+                          <MessageSquare className="w-3.5 h-3.5" />
                         </span>
+                      )}
+                      {!member.receiveEmailAlerts && !member.receiveTelegramAlerts && (
+                        <span className="text-[#5B6178] text-[11px] font-mono">Muted</span>
                       )}
                     </div>
                   </td>
 
-                  <td className="px-5 py-3.5 font-mono text-neutral-500 dark:text-neutral-400 text-[11px]">
+                  <td className="px-6 py-4 font-mono text-[#5B6178] text-[11px]">
                     {member.addedAt}
                   </td>
 
-                  <td className="px-5 py-3.5 text-right">
+                  <td className="px-6 py-4 text-right">
                     {member.role !== 'owner' ? (
                       <button
                         onClick={() => onRemoveTeamMember(member.id)}
-                        className="p-1 text-neutral-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors"
+                        className="p-1.5 text-[#5B6178] hover:text-[#D63A2C] hover:bg-[#FFF4F2] dark:hover:bg-[#2A141A] rounded-[8px] transition-colors cursor-pointer"
                         title="Revoke Access"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     ) : (
-                      <span className="text-[11px] text-neutral-400 font-mono">Primary</span>
+                      <span className="text-[11px] font-mono text-[#5B6178]">Owner</span>
                     )}
                   </td>
                 </tr>
@@ -224,122 +242,110 @@ export const EnterpriseTeamView: React.FC<EnterpriseTeamViewProps> = ({
 
       {/* Invite Member Modal */}
       {showInviteModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 max-w-md w-full max-h-[90vh] overflow-y-auto rounded p-4 sm:p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-neutral-200 dark:border-neutral-800">
-              <h3 className="text-base font-bold text-neutral-900 dark:text-white">
-                Grant Portfolio Access
-              </h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-[#101432] rounded-[14px] border border-[#E2E4EE] dark:border-[#1F2756] max-w-lg w-full p-6 sm:p-7 shadow-lg space-y-5">
+            <div className="flex items-center justify-between pb-4 border-b border-[#E2E4EE] dark:border-[#1F2756]">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-[10px] bg-[#E6E8FF] text-[#2A3AF0]">
+                  <UserPlus className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-base text-[#101432] dark:text-white">
+                    Grant Employee Scoped Access
+                  </h3>
+                  <p className="text-xs text-[#5B6178]">Assign roles and scoped domain portfolios.</p>
+                </div>
+              </div>
               <button
                 onClick={() => setShowInviteModal(false)}
-                className="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200"
+                className="p-1.5 rounded-[8px] text-[#5B6178] hover:text-[#101432] dark:hover:text-white hover:bg-[#F3F4F8] dark:hover:bg-[#1B2050] cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
 
-            <form onSubmit={handleInvite} className="space-y-4">
+            <form onSubmit={handleInvite} className="space-y-4 text-[13px]">
               <div>
-                <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">
+                <label className="block font-semibold text-[#101432] dark:text-white mb-1.5">
                   Full Name
                 </label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Alex Morgan"
+                  placeholder="e.g. Alex Henderson"
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
-                  className="w-full px-3 py-2 text-xs bg-neutral-50 dark:bg-neutral-950 border border-neutral-300 dark:border-neutral-700 rounded text-neutral-900 dark:text-white"
+                  className="w-full px-3.5 py-2 rounded-[10px] bg-[#F3F4F8] dark:bg-[#0E122B] border border-[#E2E4EE] dark:border-[#1F2756] text-[#101432] dark:text-white focus:outline-none focus:border-[#2A3AF0] focus:ring-1 focus:ring-[#2A3AF0]"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">
-                  Company Email
+                <label className="block font-semibold text-[#101432] dark:text-white mb-1.5">
+                  Corporate Email
                 </label>
                 <input
                   type="email"
                   required
-                  placeholder="alex@enterprise.com"
+                  placeholder="alex.h@company.internal"
                   value={newEmail}
                   onChange={(e) => setNewEmail(e.target.value)}
-                  className="w-full px-3 py-2 text-xs font-mono bg-neutral-50 dark:bg-neutral-950 border border-neutral-300 dark:border-neutral-700 rounded text-neutral-900 dark:text-white"
+                  className="w-full px-3.5 py-2 rounded-[10px] bg-[#F3F4F8] dark:bg-[#0E122B] border border-[#E2E4EE] dark:border-[#1F2756] text-[#101432] dark:text-white focus:outline-none focus:border-[#2A3AF0] focus:ring-1 focus:ring-[#2A3AF0] font-mono"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">
-                  Role
+                <label className="block font-semibold text-[#101432] dark:text-white mb-1.5">
+                  Role Permission
                 </label>
                 <select
                   value={newRole}
                   onChange={(e) => setNewRole(e.target.value as UserRole)}
-                  className="w-full px-3 py-2 text-xs bg-neutral-50 dark:bg-neutral-950 border border-neutral-300 dark:border-neutral-700 rounded text-neutral-900 dark:text-white"
+                  className="w-full px-3.5 py-2 rounded-[10px] bg-[#F3F4F8] dark:bg-[#0E122B] border border-[#E2E4EE] dark:border-[#1F2756] text-[#101432] dark:text-white focus:outline-none focus:border-[#2A3AF0] focus:ring-1 focus:ring-[#2A3AF0]"
                 >
-                  <option value="admin">Admin (Can add/edit domains & renewal settings)</option>
-                  <option value="monitor">Domain Monitor (Views & receives alert notifications)</option>
-                  <option value="viewer">Auditor / Viewer (Read-only)</option>
+                  <option value="admin">Admin (Add, modify, and delete domains)</option>
+                  <option value="monitor">Monitor (Manage alert thresholds &amp; view logs)</option>
+                  <option value="viewer">Viewer (Read-only status dashboard)</option>
                 </select>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">
-                  Assigned Portfolios
+                <label className="block font-semibold text-[#101432] dark:text-white mb-1.5">
+                  Assigned Domain Portfolios
                 </label>
-                <div className="space-y-1.5 pt-1">
-                  {ALL_PORTFOLIOS.map((tag) => (
-                    <label key={tag} className="flex items-center gap-2 text-xs cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={selectedPortfolios.includes(tag)}
-                        onChange={() => togglePortfolio(tag)}
-                        className="rounded border-neutral-300 dark:border-neutral-700 text-neutral-900 focus:ring-0"
-                      />
-                      <span className="text-neutral-700 dark:text-neutral-300">{tag}</span>
-                    </label>
-                  ))}
+                <div className="flex flex-wrap gap-2">
+                  {ALL_PORTFOLIOS.map((tag) => {
+                    const isSelected = selectedPortfolios.includes(tag);
+                    return (
+                      <button
+                        key={tag}
+                        type="button"
+                        onClick={() => togglePortfolio(tag)}
+                        className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-[#101432] text-white dark:bg-white dark:text-[#101432]'
+                            : 'bg-[#F3F4F8] dark:bg-[#0E122B] text-[#5B6178] border border-[#E2E4EE] dark:border-[#1F2756]'
+                        }`}
+                      >
+                        {tag} {isSelected ? '✓' : '+'}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
-              <div className="pt-2 border-t border-neutral-200 dark:border-neutral-800 space-y-2 text-xs">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={emailAlerts}
-                    onChange={(e) => setEmailAlerts(e.target.checked)}
-                    className="rounded border-neutral-300 dark:border-neutral-700 text-neutral-900 focus:ring-0"
-                  />
-                  <span className="text-neutral-700 dark:text-neutral-300">
-                    Send 30-day and 48-hour email renewal reminders
-                  </span>
-                </label>
-
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={telegramAlerts}
-                    onChange={(e) => setTelegramAlerts(e.target.checked)}
-                    className="rounded border-neutral-300 dark:border-neutral-700 text-neutral-900 focus:ring-0"
-                  />
-                  <span className="text-neutral-700 dark:text-neutral-300">
-                    Forward critical alerts to Telegram Bot
-                  </span>
-                </label>
-              </div>
-
-              <div className="pt-3 flex items-center justify-end gap-2">
+              <div className="pt-2 flex items-center justify-end gap-2.5">
                 <button
                   type="button"
                   onClick={() => setShowInviteModal(false)}
-                  className="px-3.5 py-1.5 text-xs text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded transition-colors"
+                  className="btn-neutral-surface cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 text-xs font-semibold bg-neutral-900 hover:bg-neutral-800 dark:bg-white dark:hover:bg-neutral-100 text-white dark:text-neutral-900 rounded transition-colors"
+                  className="btn-ultramarine cursor-pointer"
                 >
-                  Add Employee
+                  Confirm Authorization
                 </button>
               </div>
             </form>

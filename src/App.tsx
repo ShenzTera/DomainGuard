@@ -449,8 +449,8 @@ function MainApplication() {
   const employeeEmails = teamMembers.map((m) => m.email);
 
   return (
-    <div className="min-h-screen bg-neutral-50 dark:bg-neutral-950 text-neutral-900 dark:text-neutral-100 flex flex-col transition-colors duration-200">
-      {/* 3-Zone Top Bar Navigation */}
+    <div className="min-h-screen bg-[#F3F4F8] dark:bg-[#0B0E23] text-[#101432] dark:text-[#F3F4F8] flex flex-col transition-colors duration-200">
+      {/* 240px Ink Sidebar Navigation */}
       <TopNavigation
         currentTab={currentTab}
         onSelectTab={setCurrentTab}
@@ -458,54 +458,57 @@ function MainApplication() {
         onToggleTheme={toggleTheme}
         trackedCount={domains.length}
         nearExpiryCount={nearExpiryCount}
+        onOpenAddModal={() => setIsAddModalOpen(true)}
       />
 
-      {/* Main View Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 py-4 sm:py-6">
-        {currentTab === 'dashboard' && (
-          <DashboardView
-            domains={domains}
-            onOpenAddModal={() => setIsAddModalOpen(true)}
-            onOpenImportModal={() => setIsImportModalOpen(true)}
-            onRefreshAll={handleRefreshAll}
-            isRefreshing={isRefreshing}
-            onDeleteDomain={handleDeleteDomain}
-            onSelectDomainForDetails={(d) => setSelectedDomainForDetails(d)}
-            onToggleAlert2Days={handleToggleAlert2Days}
-            settings={settings}
-            lastUpdated={lastUpdated}
-            cloudSyncStatus={cloudSyncStatus}
-            onCloudSync={handleCloudSync}
-            onLoadSamplePortfolio={handleLoadSamplePortfolio}
-          />
-        )}
+      {/* Fluid Main View Area (offset by 240px on lg screens) */}
+      <div className="flex-1 flex flex-col min-w-0 lg:pl-[240px]">
+        <main className="flex-1 w-full max-w-7xl mx-auto p-4 sm:p-6 lg:p-10">
+          {currentTab === 'dashboard' && (
+            <DashboardView
+              domains={domains}
+              onOpenAddModal={() => setIsAddModalOpen(true)}
+              onOpenImportModal={() => setIsImportModalOpen(true)}
+              onRefreshAll={handleRefreshAll}
+              isRefreshing={isRefreshing}
+              onDeleteDomain={handleDeleteDomain}
+              onSelectDomainForDetails={(d) => setSelectedDomainForDetails(d)}
+              onToggleAlert2Days={handleToggleAlert2Days}
+              settings={settings}
+              lastUpdated={lastUpdated}
+              cloudSyncStatus={cloudSyncStatus}
+              onCloudSync={handleCloudSync}
+              onLoadSamplePortfolio={handleLoadSamplePortfolio}
+            />
+          )}
 
-        {currentTab === 'whois' && (
-          <WhoisLookupView
-            onAddDomain={handleAddDomain}
-            trackedDomains={domains}
-          />
-        )}
+          {currentTab === 'whois' && (
+            <WhoisLookupView
+              onAddDomain={handleAddDomain}
+              trackedDomains={domains}
+            />
+          )}
 
-        {currentTab === 'alerts' && (
-          <AlertsSettingsView
-            settings={settings}
-            onSaveSettings={handleSaveSettings}
-            notificationLogs={notifications}
-            onAddNotificationLog={handleAddNotificationLog}
-            domains={domains}
-          />
-        )}
+          {currentTab === 'alerts' && (
+            <AlertsSettingsView
+              settings={settings}
+              onSaveSettings={handleSaveSettings}
+              notificationLogs={notifications}
+              onAddNotificationLog={handleAddNotificationLog}
+              domains={domains}
+            />
+          )}
 
-        {currentTab === 'team' && (
-          <EnterpriseTeamView
-            teamMembers={teamMembers}
-            onAddTeamMember={handleAddTeamMember}
-            onRemoveTeamMember={handleRemoveTeamMember}
-            domains={domains}
-          />
-        )}
-      </main>
+          {currentTab === 'team' && (
+            <EnterpriseTeamView
+              teamMembers={teamMembers}
+              onAddTeamMember={handleAddTeamMember}
+              onRemoveTeamMember={handleRemoveTeamMember}
+              domains={domains}
+            />
+          )}
+        </main>
+      </div>
 
       {/* Modals */}
       <AddDomainModal

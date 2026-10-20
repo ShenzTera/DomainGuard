@@ -1960,7 +1960,7 @@ export const AlertsSettingsView: React.FC<AlertsSettingsViewProps> = ({
         <div className="flex justify-end pt-2">
           <button
             type="submit"
-            className="px-6 py-2.5 bg-neutral-900 hover:bg-neutral-800 dark:bg-white dark:hover:bg-neutral-100 text-white dark:text-neutral-900 text-sm font-semibold rounded-md transition-colors shadow-xs cursor-pointer"
+            className="btn-ultramarine px-6 py-2.5 cursor-pointer"
           >
             Save Alert Configuration
           </button>

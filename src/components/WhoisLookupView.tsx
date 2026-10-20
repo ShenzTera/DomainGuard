@@ -1,7 +1,17 @@
 import React, { useState } from 'react';
 import { fetchDomainWhois } from '../lib/domainService';
 import { DomainItem, PortfolioTag } from '../types/domain';
-import { Search, Loader2, Globe, ExternalLink, Plus, CheckCircle2, AlertTriangle, ShieldCheck, Server, Calendar } from 'lucide-react';
+import {
+  Search,
+  Loader2,
+  Globe,
+  ExternalLink,
+  Plus,
+  CheckCircle2,
+  AlertTriangle,
+  ShieldCheck,
+  Calendar,
+} from 'lucide-react';
 
 interface WhoisLookupViewProps {
   onAddDomain: (newDomain: DomainItem) => void;
@@ -90,52 +100,55 @@ export const WhoisLookupView: React.FC<WhoisLookupViewProps> = ({ onAddDomain, t
     <div className="max-w-4xl mx-auto space-y-6">
       {/* Title & Description */}
       <div>
-        <h1 className="text-xl font-bold tracking-tight text-neutral-950 dark:text-white">
-          Domain Expiry &amp; Registrar Finder
+        <div className="eyebrow-label text-[#5B6178] mb-1">
+          REGISTRY INSPECTION
+        </div>
+        <h1 className="font-display text-[30px] font-extrabold text-[#101432] dark:text-white leading-tight tracking-[-0.025em]">
+          Expiry &amp; Registrar Finder
         </h1>
-        <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
-          Direct registry intelligence powered by Official IANA RDAP &amp; Authoritative WHOIS: Discover real expiration dates, accredited registrars, and live DNS lifecycle status (100% Free, Zero API keys required).
+        <p className="text-[14px] text-[#5B6178] mt-1 leading-normal">
+          Authoritative intelligence powered by Official IANA RDAP &amp; Registry WHOIS: Discover real expiration dates, accredited registrars, and live DNS lifecycle status without API keys.
         </p>
       </div>
 
-      {/* Search Input Bar */}
-      <div className="border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-3.5 sm:p-4 rounded shadow-xs">
+      {/* Search Input Card */}
+      <div className="border border-[#E2E4EE] dark:border-[#1F2756] bg-white dark:bg-[#101432] p-6 rounded-[14px] shadow-xs">
         <form
           onSubmit={(e) => {
             e.preventDefault();
             handleSearch();
           }}
-          className="flex flex-col sm:flex-row gap-2"
+          className="flex flex-col sm:flex-row gap-3"
         >
           <div className="relative flex-1">
-            <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400" />
+            <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-[#5B6178]" />
             <input
               type="text"
-              placeholder="Query any domain (e.g. google.com, vercel.app, github.com)..."
+              placeholder="Query any domain (e.g. cloudscale.org, vercel.app, github.com)..."
               value={queryInput}
               onChange={(e) => setQueryInput(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 text-xs sm:text-sm font-mono bg-neutral-50 dark:bg-neutral-950 border border-neutral-300 dark:border-neutral-700 rounded text-neutral-900 dark:text-white placeholder:text-neutral-400 focus:outline-none focus:ring-1 focus:ring-neutral-900 dark:focus:ring-white"
+              className="w-full pl-11 pr-4 py-2.5 text-[13px] font-mono bg-[#F3F4F8] dark:bg-[#0E122B] border border-[#E2E4EE] dark:border-[#1F2756] rounded-[10px] text-[#101432] dark:text-white placeholder:text-[#5B6178] focus:outline-none focus:border-[#2A3AF0] focus:ring-1 focus:ring-[#2A3AF0] transition-all"
             />
           </div>
           <button
             type="submit"
             disabled={isLoading || !queryInput.trim()}
-            className="px-5 py-2.5 bg-neutral-900 hover:bg-neutral-800 dark:bg-white dark:hover:bg-neutral-100 text-white dark:text-neutral-900 text-xs font-semibold rounded transition-colors flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer w-full sm:w-auto"
+            className="btn-ultramarine flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer w-full sm:w-auto"
           >
             {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Globe className="w-4 h-4" />}
-            <span>Find Expiry &amp; Registrar</span>
+            <span>Lookup Domain</span>
           </button>
         </form>
 
         {/* Quick query presets */}
-        <div className="mt-3 flex items-center gap-1.5 sm:gap-2 text-xs text-neutral-500 dark:text-neutral-400 flex-wrap">
-          <span className="text-[11px]">Quick inspect:</span>
-          {['cloudflare.com', 'wikipedia.org', 'avail-brand-test-2026.org', 'github.com'].map((dom) => (
+        <div className="mt-4 flex items-center gap-2 text-xs text-[#5B6178] flex-wrap">
+          <span className="eyebrow-label text-[10px]">Presets:</span>
+          {['cloudflare.com', 'wikipedia.org', 'github.com', 'domainsecurity.io'].map((dom) => (
             <button
               key={dom}
               type="button"
               onClick={() => handleSearch(dom)}
-              className="px-2 py-0.5 rounded bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 font-mono text-[11px] text-neutral-700 dark:text-neutral-300 transition-colors"
+              className="px-2.5 py-1 rounded-[8px] bg-[#F3F4F8] dark:bg-[#1B2050] hover:bg-[#E2E4EE] dark:hover:bg-[#252C6E] border border-[#E2E4EE] dark:border-[#1F2756] font-mono text-[11px] text-[#101432] dark:text-white transition-colors cursor-pointer"
             >
               {dom}
             </button>
@@ -145,7 +158,7 @@ export const WhoisLookupView: React.FC<WhoisLookupViewProps> = ({ onAddDomain, t
 
       {/* Error state */}
       {errorMsg && (
-        <div className="p-3.5 border border-rose-200 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/40 text-rose-800 dark:text-rose-300 text-xs rounded flex items-center gap-2">
+        <div className="p-4 border border-[#FCDAD7] bg-[#FFF4F2] dark:bg-[#2A141A] text-[#D63A2C] text-[13px] rounded-[10px] flex items-center gap-2.5">
           <AlertTriangle className="w-4 h-4 shrink-0" />
           <span>{errorMsg}</span>
         </div>
@@ -153,36 +166,36 @@ export const WhoisLookupView: React.FC<WhoisLookupViewProps> = ({ onAddDomain, t
 
       {/* Result Card */}
       {result && (
-        <div className="border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 rounded p-4 sm:p-6 shadow-xs space-y-5 sm:space-y-6">
+        <div className="border border-[#E2E4EE] dark:border-[#1F2756] bg-white dark:bg-[#101432] rounded-[14px] p-6 sm:p-7 shadow-xs space-y-6">
           {/* Header Status */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 pb-4 sm:pb-5 border-b border-neutral-200 dark:border-neutral-800">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-[#E2E4EE] dark:border-[#1F2756]">
             <div>
-              <div className="flex items-center gap-2.5 flex-wrap">
-                <h2 className="text-lg sm:text-xl font-bold font-mono text-neutral-900 dark:text-white break-all">
+              <div className="flex items-center gap-3 flex-wrap">
+                <h2 className="text-xl sm:text-2xl font-bold font-mono text-[#101432] dark:text-white break-all">
                   {result.domain}
                 </h2>
                 {result.isAvailable ? (
-                  <span className="px-2.5 py-0.5 bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 rounded font-semibold text-xs flex items-center gap-1 font-mono shrink-0">
+                  <span className="px-3 py-1 bg-[#D7F4E6] text-[#0B7A57] border border-[#A2EAD1] rounded-full font-bold text-xs flex items-center gap-1.5 font-mono shrink-0">
                     <CheckCircle2 className="w-3.5 h-3.5" /> AVAILABLE
                   </span>
                 ) : (
-                  <span className="px-2.5 py-0.5 bg-neutral-100 text-neutral-800 dark:bg-neutral-800 dark:text-neutral-200 rounded font-semibold text-xs flex items-center gap-1 font-mono shrink-0">
-                    <ShieldCheck className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" /> REGISTERED
+                  <span className="px-3 py-1 bg-[#FFF0C2] text-[#3D2800] border border-[#F5D56B] rounded-full font-bold text-xs flex items-center gap-1.5 font-mono shrink-0">
+                    <ShieldCheck className="w-3.5 h-3.5 text-[#3D2800]" /> REGISTERED
                   </span>
                 )}
               </div>
-              <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
+              <p className="text-xs text-[#5B6178] font-mono mt-1.5">
                 Source: {result.whoisSource} · Query timestamp: {new Date().toLocaleTimeString()}
               </p>
             </div>
 
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-2.5 flex-wrap">
               {result.isAvailable ? (
                 <a
                   href={`https://www.namecheap.com/domains/registration/results/?domain=${encodeURIComponent(result.domain)}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded flex items-center gap-1.5 transition-colors w-full sm:w-auto justify-center"
+                  className="btn-ultramarine flex items-center gap-2 w-full sm:w-auto justify-center"
                 >
                   <span>Register Domain</span>
                   <ExternalLink className="w-3.5 h-3.5" />
@@ -193,7 +206,7 @@ export const WhoisLookupView: React.FC<WhoisLookupViewProps> = ({ onAddDomain, t
                     href={result.registrarPortalUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="px-3.5 py-2 border border-neutral-300 dark:border-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-800 dark:text-neutral-200 text-xs font-semibold rounded flex items-center gap-1.5 transition-colors flex-1 sm:flex-initial justify-center"
+                    className="btn-neutral-surface flex items-center gap-2 flex-1 sm:flex-initial justify-center"
                   >
                     <span>Renewal Portal</span>
                     <ExternalLink className="w-3.5 h-3.5" />
@@ -202,34 +215,42 @@ export const WhoisLookupView: React.FC<WhoisLookupViewProps> = ({ onAddDomain, t
                   <button
                     onClick={handleTrackResult}
                     disabled={isAlreadyTracked}
-                    className={`px-4 py-2 text-xs font-semibold rounded flex items-center gap-1.5 transition-colors flex-1 sm:flex-initial justify-center ${
+                    className={`px-4 py-2 text-[13px] font-semibold rounded-[10px] flex items-center gap-2 transition-all flex-1 sm:flex-initial justify-center ${
                       isAlreadyTracked
-                        ? 'bg-neutral-100 dark:bg-neutral-800 text-neutral-400 dark:text-neutral-500 cursor-default'
-                        : 'bg-neutral-900 hover:bg-neutral-800 dark:bg-white dark:hover:bg-neutral-100 text-white dark:text-neutral-900'
+                        ? 'bg-[#F3F4F8] dark:bg-[#1B2050] text-[#5B6178] cursor-default border border-[#E2E4EE] dark:border-[#1F2756]'
+                        : 'btn-ultramarine cursor-pointer'
                     }`}
                   >
                     <Plus className="w-3.5 h-3.5" />
-                    <span>{isAlreadyTracked ? 'Tracked in Dashboard' : 'Track in Portfolio'}</span>
+                    <span>{isAlreadyTracked ? 'Tracked in Ledger' : 'Track in Portfolio'}</span>
                   </button>
                 </>
               )}
             </div>
           </div>
 
-          {/* If Registered, Show Comprehensive Expiry & WHOIS Details */}
+          {/* If Registered, Show Expiry & WHOIS Details */}
           {!result.isAvailable && (
-            <div className="space-y-5 sm:space-y-6">
+            <div className="space-y-6">
               {/* Expiration Timeline Banner */}
-              <div className="p-3.5 sm:p-4 rounded border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 shrink-0">
-                    <Calendar className="w-5 h-5 text-neutral-600 dark:text-neutral-300" />
+              <div
+                className={`p-5 rounded-[12px] border flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
+                  result.daysUntilExpiration <= 7
+                    ? 'border-[#FCDAD7] bg-[#FFF4F2] dark:bg-[#2A141A]'
+                    : result.daysUntilExpiration <= 30
+                    ? 'border-[#F5D56B] bg-[#FFF0C2] dark:bg-[#2A2109]'
+                    : 'border-[#E2E4EE] dark:border-[#1F2756] bg-[#F3F4F8] dark:bg-[#0E122B]'
+                }`}
+              >
+                <div className="flex items-center gap-3.5">
+                  <div className="p-3 rounded-[10px] bg-white dark:bg-[#101432] border border-[#E2E4EE] dark:border-[#1F2756] shrink-0 text-[#101432] dark:text-white shadow-xs">
+                    <Calendar className="w-5 h-5 text-[#2A3AF0]" />
                   </div>
                   <div>
-                    <div className="text-xs text-neutral-500 dark:text-neutral-400 font-medium">
+                    <div className="eyebrow-label text-[#5B6178]">
                       Expiration Date
                     </div>
-                    <div className="text-base font-bold font-mono text-neutral-900 dark:text-white">
+                    <div className="text-lg font-bold font-mono text-[#101432] dark:text-white mt-0.5">
                       {result.expirationDate || 'Not declared in RDAP'}
                     </div>
                   </div>
@@ -237,12 +258,12 @@ export const WhoisLookupView: React.FC<WhoisLookupViewProps> = ({ onAddDomain, t
 
                 <div className="text-left sm:text-right">
                   <span
-                    className={`px-3 py-1 font-mono text-xs font-bold rounded inline-block ${
-                      result.daysUntilExpiration <= 0
-                        ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
+                    className={`px-3 py-1 font-mono text-xs font-bold rounded-full inline-block ${
+                      result.daysUntilExpiration <= 7
+                        ? 'bg-[#D63A2C] text-white'
                         : result.daysUntilExpiration <= 30
-                        ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
-                        : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                        ? 'bg-[#FFC21A] text-[#3D2800]'
+                        : 'bg-[#D7F4E6] text-[#0B7A57]'
                     }`}
                   >
                     {result.daysUntilExpiration !== null
@@ -251,47 +272,47 @@ export const WhoisLookupView: React.FC<WhoisLookupViewProps> = ({ onAddDomain, t
                         : `${result.daysUntilExpiration} days remaining`
                       : 'Active'}
                   </span>
-                  <div className="text-[11px] text-neutral-400 dark:text-neutral-500 mt-1">
+                  <div className="font-mono text-[11px] text-[#5B6178] mt-1">
                     {result.daysUntilExpiration <= 30
                       ? 'Priority: Immediate renewal recommended'
-                      : 'Priority: Nominal'}
+                      : 'Priority: Ledger nominal'}
                   </div>
                 </div>
               </div>
 
               {/* Data Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-xs">
-                <div className="p-3 border border-neutral-200 dark:border-neutral-800 rounded bg-white dark:bg-neutral-900">
-                  <span className="text-neutral-400 dark:text-neutral-500 block mb-1">Registrar</span>
-                  <span className="font-semibold text-sm text-neutral-900 dark:text-white">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                <div className="p-4 border border-[#E2E4EE] dark:border-[#1F2756] rounded-[10px] bg-white dark:bg-[#101432]">
+                  <span className="eyebrow-label text-[#5B6178] block mb-1">Registrar</span>
+                  <span className="font-semibold text-sm text-[#101432] dark:text-white">
                     {result.registrar || 'Privacy / Unlisted'}
                   </span>
                 </div>
 
-                <div className="p-3 border border-neutral-200 dark:border-neutral-800 rounded bg-white dark:bg-neutral-900">
-                  <span className="text-neutral-400 dark:text-neutral-500 block mb-1">Company / Organization</span>
-                  <span className="font-semibold text-sm text-neutral-900 dark:text-white">
+                <div className="p-4 border border-[#E2E4EE] dark:border-[#1F2756] rounded-[10px] bg-white dark:bg-[#101432]">
+                  <span className="eyebrow-label text-[#5B6178] block mb-1">Company / Organization</span>
+                  <span className="font-semibold text-sm text-[#101432] dark:text-white">
                     {result.company || 'Privacy Protected'}
                   </span>
                 </div>
 
-                <div className="p-3 border border-neutral-200 dark:border-neutral-800 rounded bg-white dark:bg-neutral-900">
-                  <span className="text-neutral-400 dark:text-neutral-500 block mb-1">Registration Date</span>
-                  <span className="font-mono text-sm text-neutral-800 dark:text-neutral-200">
+                <div className="p-4 border border-[#E2E4EE] dark:border-[#1F2756] rounded-[10px] bg-white dark:bg-[#101432]">
+                  <span className="eyebrow-label text-[#5B6178] block mb-1">Registration Date</span>
+                  <span className="font-mono text-sm text-[#101432] dark:text-white">
                     {result.registrationDate || 'Undisclosed'}
                   </span>
                 </div>
 
-                <div className="p-3 border border-neutral-200 dark:border-neutral-800 rounded bg-white dark:bg-neutral-900">
-                  <span className="text-neutral-400 dark:text-neutral-500 block mb-1">DNS Resolution Status</span>
+                <div className="p-4 border border-[#E2E4EE] dark:border-[#1F2756] rounded-[10px] bg-white dark:bg-[#101432]">
+                  <span className="eyebrow-label text-[#5B6178] block mb-1">DNS Resolution Status</span>
                   <span className="flex items-center gap-1.5 font-medium text-sm mt-0.5">
                     {result.isResolving ? (
-                      <span className="text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                        <CheckCircle2 className="w-3.5 h-3.5" /> Resolving (Online)
+                      <span className="text-[#0B7A57] flex items-center gap-1.5 font-mono text-xs font-semibold">
+                        <CheckCircle2 className="w-4 h-4" /> Resolving (Online)
                       </span>
                     ) : (
-                      <span className="text-amber-600 dark:text-amber-400 flex items-center gap-1">
-                        <AlertTriangle className="w-3.5 h-3.5" /> Unresolving / Inactive
+                      <span className="text-[#D63A2C] flex items-center gap-1.5 font-mono text-xs font-semibold">
+                        <AlertTriangle className="w-4 h-4" /> Unresolving / Inactive
                       </span>
                     )}
                   </span>
@@ -301,12 +322,12 @@ export const WhoisLookupView: React.FC<WhoisLookupViewProps> = ({ onAddDomain, t
               {/* Nameservers */}
               {result.nameservers && result.nameservers.length > 0 && (
                 <div>
-                  <h4 className="text-xs font-semibold text-neutral-700 dark:text-neutral-300 uppercase tracking-wider mb-2">
+                  <div className="eyebrow-label text-[#5B6178] mb-2">
                     Authoritative Nameservers ({result.nameservers.length})
-                  </h4>
-                  <div className="p-3 border border-neutral-200 dark:border-neutral-800 rounded bg-neutral-50 dark:bg-neutral-950 font-mono text-xs space-y-1">
+                  </div>
+                  <div className="p-4 border border-[#E2E4EE] dark:border-[#1F2756] rounded-[10px] bg-[#F3F4F8] dark:bg-[#0E122B] font-mono text-xs space-y-1.5">
                     {result.nameservers.map((ns: string, i: number) => (
-                      <div key={i} className="text-neutral-700 dark:text-neutral-300">
+                      <div key={i} className="text-[#101432] dark:text-white">
                         {ns}
                       </div>
                     ))}
@@ -318,14 +339,14 @@ export const WhoisLookupView: React.FC<WhoisLookupViewProps> = ({ onAddDomain, t
 
           {/* If Available */}
           {result.isAvailable && (
-            <div className="p-6 border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/50 dark:bg-emerald-950/20 rounded text-center space-y-3">
-              <div className="w-10 h-10 rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 flex items-center justify-center mx-auto">
-                <CheckCircle2 className="w-6 h-6" />
+            <div className="p-8 border border-[#A2EAD1] dark:border-emerald-900/60 bg-[#D7F4E6]/40 dark:bg-emerald-950/20 rounded-[12px] text-center space-y-4">
+              <div className="w-12 h-12 rounded-[10px] bg-[#D7F4E6] text-[#0B7A57] border border-[#A2EAD1] flex items-center justify-center mx-auto">
+                <CheckCircle2 className="w-7 h-7" />
               </div>
-              <h3 className="text-base font-bold text-neutral-900 dark:text-white">
-                {result.domain} is Available for Purchase!
+              <h3 className="text-lg font-bold font-display text-[#101432] dark:text-white">
+                {result.domain} is Available for Registration!
               </h3>
-              <p className="text-xs text-neutral-600 dark:text-neutral-400 max-w-md mx-auto">
+              <p className="text-[13px] text-[#5B6178] max-w-md mx-auto leading-relaxed">
                 No active WHOIS or RDAP records exist for this domain. You can claim it now before competitors or domain squatters acquire it.
               </p>
               <div className="pt-2">
@@ -333,9 +354,9 @@ export const WhoisLookupView: React.FC<WhoisLookupViewProps> = ({ onAddDomain, t
                   href={`https://www.namecheap.com/domains/registration/results/?domain=${encodeURIComponent(result.domain)}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded shadow-xs"
+                  className="btn-ultramarine inline-flex items-center gap-2"
                 >
-                  <span>Claim on Namecheap</span>
+                  <span>Claim Domain</span>
                   <ExternalLink className="w-3.5 h-3.5" />
                 </a>
               </div>

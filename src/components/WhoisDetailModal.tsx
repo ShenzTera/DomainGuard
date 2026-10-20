@@ -11,64 +11,76 @@ interface WhoisDetailModalProps {
 export const WhoisDetailModal: React.FC<WhoisDetailModalProps> = ({ domain, onClose, onToggleAlert2Days }) => {
   if (!domain) return null;
 
+  const isExpired = domain.daysUntilExpiration <= 0;
+  const isCritical7d = domain.daysUntilExpiration > 0 && domain.daysUntilExpiration <= 7;
+  const isWarning30d = domain.daysUntilExpiration > 7 && domain.daysUntilExpiration <= 30;
+
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
-      <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 max-w-2xl w-full max-h-[90vh] overflow-y-auto rounded shadow-2xl flex flex-col">
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
+      <div className="bg-white dark:bg-[#101432] border border-[#E2E4EE] dark:border-[#1F2756] max-w-2xl w-full max-h-[90vh] overflow-y-auto rounded-[14px] shadow-lg flex flex-col">
         {/* Modal Header */}
-        <div className="px-4 sm:px-6 py-3.5 sm:py-4 border-b border-neutral-200 dark:border-neutral-800 flex items-center justify-between sticky top-0 bg-white dark:bg-neutral-900 z-10">
-          <div className="flex items-center gap-2.5">
-            <Globe className="w-5 h-5 text-neutral-700 dark:text-neutral-300 shrink-0" />
+        <div className="px-6 py-5 border-b border-[#E2E4EE] dark:border-[#1F2756] flex items-center justify-between sticky top-0 bg-white dark:bg-[#101432] z-10">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-[10px] bg-[#E6E8FF] text-[#2A3AF0]">
+              <Globe className="w-5 h-5 shrink-0" />
+            </div>
             <div>
-              <div className="flex items-center gap-1.5">
-                <h2 className="text-base font-bold text-neutral-900 dark:text-white font-mono break-all">
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-bold font-mono text-[#101432] dark:text-white break-all">
                   {domain.domain}
                 </h2>
                 <a
                   href={domain.domain.startsWith('http') ? domain.domain : `https://${domain.domain.replace(/^(?:https?:\/\/)?(?:www\.)?/i, '')}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200 transition-colors p-1 rounded hover:bg-neutral-100 dark:hover:bg-neutral-800 shrink-0 inline-flex items-center"
-                  title="Open in new tab"
+                  className="text-[#5B6178] hover:text-[#2A3AF0] transition-colors p-1 rounded-[6px] hover:bg-[#F3F4F8] dark:hover:bg-[#1B2050] shrink-0 inline-flex items-center"
+                  title="Open live site"
                 >
                   <ExternalLink className="w-3.5 h-3.5" />
                 </a>
               </div>
-              <div className="flex items-center gap-2 text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
-                <span>WHOIS &amp; RDAP Record Details</span>
-                <span aria-hidden="true">·</span>
+              <div className="flex items-center gap-2 text-xs text-[#5B6178] font-mono mt-0.5">
+                <span>WHOIS &amp; RDAP RECORD</span>
+                <span>·</span>
                 <span className="truncate">{domain.whoisSource || 'ICANN RDAP Protocol'}</span>
               </div>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 rounded transition-colors cursor-pointer"
+            className="p-1.5 text-[#5B6178] hover:text-[#101432] dark:hover:text-white rounded-[8px] hover:bg-[#F3F4F8] dark:hover:bg-[#1B2050] transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Modal Body */}
-        <div className="p-4 sm:p-6 space-y-5 sm:space-y-6">
+        <div className="p-6 space-y-6 text-[13px]">
           {/* Expiration & Renewal Card */}
-          <div className="p-3.5 sm:p-4 rounded border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
+          <div
+            className={`p-5 rounded-[12px] border flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
+              isExpired || isCritical7d
+                ? 'border-[#FCDAD7] bg-[#FFF4F2] dark:bg-[#2A141A]'
+                : isWarning30d
+                ? 'border-[#F5D56B] bg-[#FFF0C2] dark:bg-[#2A2109]'
+                : 'border-[#E2E4EE] dark:border-[#1F2756] bg-[#F3F4F8] dark:bg-[#0E122B]'
+            }`}
+          >
             <div>
-              <div className="text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">
+              <div className="eyebrow-label text-[#5B6178]">
                 Expiration Status
               </div>
-              <div className="flex items-center gap-2 mt-1 flex-wrap">
-                <span className="text-base sm:text-lg font-bold font-mono text-neutral-900 dark:text-white">
+              <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                <span className="text-xl font-bold font-mono text-[#101432] dark:text-white">
                   {domain.expirationDate || 'Pending query'}
                 </span>
                 <span
-                  className={`text-xs px-2 py-0.5 font-mono rounded font-semibold ${
-                    domain.daysUntilExpiration <= 0
-                      ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-300'
-                      : domain.daysUntilExpiration <= 7
-                      ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-300'
-                      : domain.daysUntilExpiration <= 30
-                      ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300'
-                      : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300'
+                  className={`text-xs px-2.5 py-1 font-mono rounded-full font-bold ${
+                    isExpired || isCritical7d
+                      ? 'bg-[#D63A2C] text-white'
+                      : isWarning30d
+                      ? 'bg-[#FFC21A] text-[#3D2800]'
+                      : 'bg-[#D7F4E6] text-[#0B7A57]'
                   }`}
                 >
                   {domain.daysUntilExpiration <= 0
@@ -76,8 +88,8 @@ export const WhoisDetailModal: React.FC<WhoisDetailModalProps> = ({ domain, onCl
                     : `${domain.daysUntilExpiration} days remaining`}
                 </span>
               </div>
-              <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
-                Priority: {domain.daysUntilExpiration <= 7 ? 'Critical / Immediate Action' : domain.daysUntilExpiration <= 30 ? 'High Warning (<30d)' : 'Nominal'}
+              <p className="text-xs text-[#5B6178] font-mono mt-1">
+                Priority: {isCritical7d ? 'Critical Action' : isWarning30d ? 'Act Soon (<30d)' : 'Nominal'}
               </p>
             </div>
 
@@ -85,7 +97,13 @@ export const WhoisDetailModal: React.FC<WhoisDetailModalProps> = ({ domain, onCl
               href={domain.registrarPortalUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-neutral-900 hover:bg-neutral-800 dark:bg-white dark:hover:bg-neutral-100 text-white dark:text-neutral-900 text-xs font-semibold rounded transition-colors whitespace-nowrap self-stretch sm:self-auto"
+              className={`inline-flex items-center justify-center gap-2 px-4 py-2 rounded-[10px] text-[13px] font-semibold transition-all whitespace-nowrap self-stretch sm:self-auto cursor-pointer ${
+                isExpired || isCritical7d
+                  ? 'btn-coral'
+                  : isWarning30d
+                  ? 'btn-sun'
+                  : 'btn-ultramarine'
+              }`}
             >
               <span>Renew via {domain.registrar.split(',')[0]}</span>
               <ExternalLink className="w-3.5 h-3.5" />
@@ -93,123 +111,104 @@ export const WhoisDetailModal: React.FC<WhoisDetailModalProps> = ({ domain, onCl
           </div>
 
           {/* Core Metadata Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-xs">
-            <div className="p-3 border border-neutral-200 dark:border-neutral-800 rounded bg-white dark:bg-neutral-900">
-              <div className="text-neutral-500 dark:text-neutral-400 mb-1 flex items-center gap-1.5 font-medium">
-                <Building className="w-3.5 h-3.5" />
-                <span>Registrant Organization / Company</span>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+            <div className="p-4 border border-[#E2E4EE] dark:border-[#1F2756] rounded-[10px] bg-white dark:bg-[#101432]">
+              <div className="text-[#5B6178] mb-1 flex items-center gap-1.5 font-medium">
+                <Building className="w-4 h-4 text-[#2A3AF0]" />
+                <span className="eyebrow-label">Registrant Organization</span>
               </div>
-              <div className="text-sm font-semibold text-neutral-900 dark:text-white">
+              <div className="text-sm font-semibold text-[#101432] dark:text-white mt-1">
                 {domain.company || 'Privacy Protected'}
               </div>
             </div>
 
-            <div className="p-3 border border-neutral-200 dark:border-neutral-800 rounded bg-white dark:bg-neutral-900">
-              <div className="text-neutral-500 dark:text-neutral-400 mb-1 flex items-center gap-1.5 font-medium">
-                <Shield className="w-3.5 h-3.5" />
-                <span>Registrar of Record</span>
+            <div className="p-4 border border-[#E2E4EE] dark:border-[#1F2756] rounded-[10px] bg-white dark:bg-[#101432]">
+              <div className="text-[#5B6178] mb-1 flex items-center gap-1.5 font-medium">
+                <Shield className="w-4 h-4 text-[#2A3AF0]" />
+                <span className="eyebrow-label">Registrar of Record</span>
               </div>
-              <div className="text-sm font-semibold text-neutral-900 dark:text-white">
+              <div className="text-sm font-semibold text-[#101432] dark:text-white mt-1">
                 {domain.registrar || 'Unknown'}
               </div>
             </div>
 
-            <div className="p-3 border border-neutral-200 dark:border-neutral-800 rounded bg-white dark:bg-neutral-900">
-              <div className="text-neutral-500 dark:text-neutral-400 mb-1 flex items-center gap-1.5 font-medium">
-                <Calendar className="w-3.5 h-3.5" />
-                <span>Registration Date</span>
+            <div className="p-4 border border-[#E2E4EE] dark:border-[#1F2756] rounded-[10px] bg-white dark:bg-[#101432]">
+              <div className="text-[#5B6178] mb-1 flex items-center gap-1.5 font-medium">
+                <Calendar className="w-4 h-4 text-[#2A3AF0]" />
+                <span className="eyebrow-label">Registration Date</span>
               </div>
-              <div className="text-sm font-mono text-neutral-800 dark:text-neutral-200">
+              <div className="text-sm font-mono text-[#101432] dark:text-white mt-1">
                 {domain.registrationDate || 'Not declared in RDAP'}
               </div>
             </div>
 
-            <div className="p-3 border border-neutral-200 dark:border-neutral-800 rounded bg-white dark:bg-neutral-900">
-              <div className="text-neutral-500 dark:text-neutral-400 mb-1 flex items-center gap-1.5 font-medium">
-                <Server className="w-3.5 h-3.5" />
-                <span>Working DNS Resolution</span>
+            <div className="p-4 border border-[#E2E4EE] dark:border-[#1F2756] rounded-[10px] bg-white dark:bg-[#101432]">
+              <div className="text-[#5B6178] mb-1 flex items-center gap-1.5 font-medium">
+                <Server className="w-4 h-4 text-[#2A3AF0]" />
+                <span className="eyebrow-label">Working DNS Resolution</span>
               </div>
-              <div className="flex items-center gap-1.5 mt-0.5">
+              <div className="flex items-center gap-2 mt-1">
                 {domain.isResolving ? (
                   <>
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                    <span className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
-                      Active (Resolving A/AAAA records)
+                    <CheckCircle2 className="w-4 h-4 text-[#0B7A57]" />
+                    <span className="text-sm font-mono text-[#0B7A57] font-semibold">
+                      Active (Resolving)
                     </span>
                   </>
                 ) : (
                   <>
-                    <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-                    <span className="text-sm font-medium text-amber-700 dark:text-amber-400">
-                      Unassigned or DNS Inactive
+                    <AlertTriangle className="w-4 h-4 text-[#D63A2C]" />
+                    <span className="text-sm font-mono text-[#D63A2C] font-semibold">
+                      Unassigned or Inactive DNS
                     </span>
                   </>
                 )}
               </div>
             </div>
 
-            <div className="p-3 border border-neutral-200 dark:border-neutral-800 rounded bg-white dark:bg-neutral-900">
-              <div className="text-neutral-500 dark:text-neutral-400 mb-1 flex items-center gap-1.5 font-medium">
-                <Globe className="w-3.5 h-3.5" />
-                <span>Website Working Status &amp; HTTP Code</span>
+            <div className="p-4 border border-[#E2E4EE] dark:border-[#1F2756] rounded-[10px] bg-white dark:bg-[#101432] sm:col-span-2">
+              <div className="text-[#5B6178] mb-1 flex items-center gap-1.5 font-medium">
+                <Globe className="w-4 h-4 text-[#2A3AF0]" />
+                <span className="eyebrow-label">Website Working Status &amp; HTTP Code</span>
               </div>
-              <div className="flex items-center gap-2 mt-0.5">
-                <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+              <div className="flex items-center gap-2.5 mt-1.5 flex-wrap">
+                <span className="font-mono text-xs font-bold px-2.5 py-1 rounded-full bg-[#D7F4E6] text-[#0B7A57]">
                   {domain.httpStatusCode ? `HTTP ${domain.httpStatusCode}` : 'HTTP 200 OK'}
                 </span>
-                <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
-                  Website working properly {domain.httpLatencyMs ? `(${domain.httpLatencyMs}ms)` : ''}
+                <span className="text-xs font-mono text-[#101432] dark:text-white">
+                  Latency: {domain.httpLatencyMs ? `${domain.httpLatencyMs}ms` : 'normal'}
                 </span>
               </div>
             </div>
           </div>
 
-          {/* Nameservers & DNS IPs */}
+          {/* Nameservers */}
           <div>
-            <h4 className="text-xs font-semibold text-neutral-700 dark:text-neutral-300 uppercase tracking-wider mb-2">
+            <div className="eyebrow-label text-[#5B6178] mb-2">
               Authoritative Nameservers
-            </h4>
-            <div className="p-3 border border-neutral-200 dark:border-neutral-800 rounded bg-neutral-50 dark:bg-neutral-950 font-mono text-xs text-neutral-700 dark:text-neutral-300 space-y-1">
+            </div>
+            <div className="p-4 border border-[#E2E4EE] dark:border-[#1F2756] rounded-[10px] bg-[#F3F4F8] dark:bg-[#0E122B] font-mono text-xs text-[#101432] dark:text-white space-y-1.5">
               {domain.nameservers && domain.nameservers.length > 0 ? (
                 domain.nameservers.map((ns, idx) => (
                   <div key={idx} className="flex items-center justify-between">
                     <span>{ns}</span>
-                    <span className="text-neutral-400 dark:text-neutral-600 text-[11px]">NS #{idx + 1}</span>
+                    <span className="text-[#5B6178] text-[11px]">NS #{idx + 1}</span>
                   </div>
                 ))
               ) : (
-                <div className="text-neutral-400">No delegated nameservers returned.</div>
+                <div className="text-[#5B6178]">No delegated nameservers returned.</div>
               )}
             </div>
           </div>
 
-          {/* Resolving IP Addresses */}
-          {domain.dnsIps && domain.dnsIps.length > 0 && (
-            <div>
-              <h4 className="text-xs font-semibold text-neutral-700 dark:text-neutral-300 uppercase tracking-wider mb-2">
-                Resolved IP Records (A)
-              </h4>
-              <div className="flex flex-wrap gap-2">
-                {domain.dnsIps.map((ip, i) => (
-                  <span
-                    key={i}
-                    className="px-2.5 py-1 rounded bg-neutral-100 dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200 font-mono text-xs border border-neutral-200 dark:border-neutral-700"
-                  >
-                    {ip}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Renewal Alert Configuration for this Domain */}
-          <div className="pt-4 border-t border-neutral-200 dark:border-neutral-800">
+          {/* 2-Day Renewal Alert Toggle */}
+          <div className="pt-4 border-t border-[#E2E4EE] dark:border-[#1F2756]">
             <div className="flex items-center justify-between">
               <div>
-                <h4 className="text-xs font-semibold text-neutral-900 dark:text-white">
+                <h4 className="text-xs font-semibold text-[#101432] dark:text-white">
                   Continuous 2-Day Renewal Alert Schedule
                 </h4>
-                <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                <p className="text-xs text-[#5B6178]">
                   Sends automated reminders every 48 hours until domain renewal is finalized.
                 </p>
               </div>
@@ -220,20 +219,20 @@ export const WhoisDetailModal: React.FC<WhoisDetailModalProps> = ({ domain, onCl
                   onChange={() => onToggleAlert2Days && onToggleAlert2Days(domain.id)}
                   className="sr-only peer"
                 />
-                <div className="w-9 h-5 bg-neutral-300 peer-focus:outline-none rounded-full peer dark:bg-neutral-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-neutral-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-neutral-900 dark:peer-checked:bg-emerald-600"></div>
+                <div className="w-10 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#2A3AF0]"></div>
               </label>
             </div>
           </div>
         </div>
 
         {/* Modal Footer */}
-        <div className="px-6 py-3 border-t border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 flex items-center justify-between">
-          <span className="text-xs font-mono text-neutral-400 dark:text-neutral-600">
-            ID: {domain.id} · Checked: {new Date(domain.lastCheckedAt).toLocaleTimeString()}
+        <div className="px-6 py-4 border-t border-[#E2E4EE] dark:border-[#1F2756] bg-[#F3F4F8] dark:bg-[#0E122B] flex items-center justify-between">
+          <span className="text-xs font-mono text-[#5B6178]">
+            Checked: {new Date(domain.lastCheckedAt).toLocaleTimeString()}
           </span>
           <button
             onClick={onClose}
-            className="px-4 py-1.5 text-xs font-semibold bg-neutral-200 dark:bg-neutral-800 hover:bg-neutral-300 dark:hover:bg-neutral-700 text-neutral-800 dark:text-neutral-200 rounded transition-colors"
+            className="btn-neutral-surface text-xs cursor-pointer"
           >
             Close
           </button>
