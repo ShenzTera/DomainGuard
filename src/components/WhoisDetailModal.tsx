@@ -6,9 +6,10 @@ interface WhoisDetailModalProps {
   domain: DomainItem | null;
   onClose: () => void;
   onToggleAlert2Days?: (id: string) => void;
+  onCheckDns?: (domain: string) => void;
 }
 
-export const WhoisDetailModal: React.FC<WhoisDetailModalProps> = ({ domain, onClose, onToggleAlert2Days }) => {
+export const WhoisDetailModal: React.FC<WhoisDetailModalProps> = ({ domain, onClose, onToggleAlert2Days, onCheckDns }) => {
   if (!domain) return null;
 
   const isExpired = domain.daysUntilExpiration <= 0;
@@ -226,16 +227,27 @@ export const WhoisDetailModal: React.FC<WhoisDetailModalProps> = ({ domain, onCl
         </div>
 
         {/* Modal Footer */}
-        <div className="px-6 py-4 border-t border-[#E2E4EE] dark:border-[#1F2756] bg-[#F3F4F8] dark:bg-[#0E122B] flex items-center justify-between">
+        <div className="px-6 py-4 border-t border-[#E2E4EE] dark:border-[#1F2756] bg-[#F3F4F8] dark:bg-[#0E122B] flex items-center justify-between gap-3">
           <span className="text-xs font-mono text-[#5B6178]">
             Checked: {new Date(domain.lastCheckedAt).toLocaleTimeString()}
           </span>
-          <button
-            onClick={onClose}
-            className="btn-neutral-surface text-xs cursor-pointer"
-          >
-            Close
-          </button>
+          <div className="flex items-center gap-2">
+            {onCheckDns && (
+              <button
+                type="button"
+                onClick={() => onCheckDns(domain.domain)}
+                className="btn-ultramarine text-xs px-3 py-1.5 cursor-pointer flex items-center gap-1.5"
+              >
+                <span>Inspect DNS</span>
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="btn-neutral-surface text-xs cursor-pointer"
+            >
+              Close
+            </button>
+          </div>
         </div>
       </div>
     </div>

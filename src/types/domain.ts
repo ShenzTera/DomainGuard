@@ -79,3 +79,27 @@ export interface AlertSettings {
   continuousReminderEvery2Days: boolean;
   autoRefreshIntervalMinutes: number; // e.g. 5, 15, 60
 }
+
+export type DnsRecordType = 'A' | 'AAAA' | 'CNAME' | 'MX' | 'TXT' | 'NS' | 'SOA' | 'SRV' | 'CAA' | 'ANY';
+
+export interface DnsRecordEntry {
+  name: string;
+  type: string;
+  value: string;
+  ttl?: number | null;
+  priority?: number | null;
+}
+
+export interface DnsLookupResult {
+  success: boolean;
+  domain: string;
+  type: DnsRecordType;
+  status: string; // 'NOERROR' | 'NXDOMAIN' | 'NODATA' | 'SERVFAIL'
+  records: DnsRecordEntry[];
+  nameservers?: string[];
+  source: string;
+  responseTimeMs?: number;
+  error?: string;
+  raw?: any;
+}
+

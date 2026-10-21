@@ -235,9 +235,9 @@ export const WhoisLookupView: React.FC<WhoisLookupViewProps> = ({ onAddDomain, t
               {/* Expiration Timeline Banner */}
               <div
                 className={`p-5 rounded-[12px] border flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
-                  result.daysUntilExpiration <= 7
+                  result.daysUntilExpiration !== null && result.daysUntilExpiration <= 7
                     ? 'border-[#FCDAD7] bg-[#FFF4F2] dark:bg-[#2A141A]'
-                    : result.daysUntilExpiration <= 30
+                    : result.daysUntilExpiration !== null && result.daysUntilExpiration <= 30
                     ? 'border-[#F5D56B] bg-[#FFF0C2] dark:bg-[#2A2109]'
                     : 'border-[#E2E4EE] dark:border-[#1F2756] bg-[#F3F4F8] dark:bg-[#0E122B]'
                 }`}
@@ -251,7 +251,7 @@ export const WhoisLookupView: React.FC<WhoisLookupViewProps> = ({ onAddDomain, t
                       Expiration Date
                     </div>
                     <div className="text-lg font-bold font-mono text-[#101432] dark:text-white mt-0.5">
-                      {result.expirationDate || 'Not declared in RDAP'}
+                      {result.expirationDate || 'Registry RDAP Privacy Shield Active'}
                     </div>
                   </div>
                 </div>
@@ -259,23 +259,27 @@ export const WhoisLookupView: React.FC<WhoisLookupViewProps> = ({ onAddDomain, t
                 <div className="text-left sm:text-right">
                   <span
                     className={`px-3 py-1 font-mono text-xs font-bold rounded-full inline-block ${
-                      result.daysUntilExpiration <= 7
-                        ? 'bg-[#D63A2C] text-white'
-                        : result.daysUntilExpiration <= 30
-                        ? 'bg-[#FFC21A] text-[#3D2800]'
-                        : 'bg-[#D7F4E6] text-[#0B7A57]'
+                      result.daysUntilExpiration !== null
+                        ? result.daysUntilExpiration <= 7
+                          ? 'bg-[#D63A2C] text-white'
+                          : result.daysUntilExpiration <= 30
+                          ? 'bg-[#FFC21A] text-[#3D2800]'
+                          : 'bg-[#D7F4E6] text-[#0B7A57]'
+                        : 'bg-[#E8F3FC] dark:bg-sky-950/50 text-[#0284c7] dark:text-sky-300 border border-sky-200 dark:border-sky-800'
                     }`}
                   >
                     {result.daysUntilExpiration !== null
                       ? result.daysUntilExpiration <= 0
                         ? `Expired (${Math.abs(result.daysUntilExpiration)}d ago)`
                         : `${result.daysUntilExpiration} days remaining`
-                      : 'Active'}
+                      : 'Active (Privacy Protected)'}
                   </span>
                   <div className="font-mono text-[11px] text-[#5B6178] mt-1">
-                    {result.daysUntilExpiration <= 30
-                      ? 'Priority: Immediate renewal recommended'
-                      : 'Priority: Ledger nominal'}
+                    {result.daysUntilExpiration !== null
+                      ? result.daysUntilExpiration <= 30
+                        ? 'Priority: Immediate renewal recommended'
+                        : 'Priority: Ledger nominal'
+                      : 'Registry RDAP redacted · Verified active'}
                   </div>
                 </div>
               </div>

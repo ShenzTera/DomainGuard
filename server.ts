@@ -204,29 +204,68 @@ app.get('/api/whois', async (req, res) => {
       }
 
       if (domscanRes.ok) {
-        const domscanData = await domscanRes.json();
-        const expDate = domscanData.expiration_date || domscanData.expiry_date || domscanData.expires_at || null;
-        if (expDate) {
-          const expTime = new Date(expDate).getTime();
-          const daysUntilExpiration = Math.ceil((expTime - Date.now()) / (1000 * 60 * 60 * 24));
-          const regName = domscanData.registrar || domscanData.registration?.registrar || 'ICANN Accredited Registrar';
+        const domscanData: any = await domscanRes.json();
+        if (domscanData.status === 'available' || domscanData.status === 'unregistered') {
           return res.json({
             domain,
-            isAvailable: false,
-            workingStatus: daysUntilExpiration <= 0 ? 'expired' : daysUntilExpiration <= 30 ? 'expiring_soon' : 'active',
-            isResolving,
-            registrar: regName,
-            registrarPortalUrl: getRegistrarPortalUrl(regName),
-            company: domscanData.company || `${domain.split('.')[0].toUpperCase()} Organization`,
-            expirationDate: expDate.split('T')[0],
-            registrationDate: domscanData.creation_date || domscanData.registered_at || null,
-            daysUntilExpiration,
-            nameservers: nameServers.length ? nameServers : (domscanData.nameservers || []),
-            dnsIps,
-            rawStatus: Array.isArray(domscanData.status) ? domscanData.status : ['active'],
-            whoisSource: 'Domscan Domain Intelligence API',
+            isAvailable: true,
+            workingStatus: 'available',
+            isResolving: false,
+            registrar: null,
+            registrarPortalUrl: `https://www.namecheap.com/domains/registration/results/?domain=${encodeURIComponent(domain)}`,
+            company: null,
+            expirationDate: null,
+            registrationDate: null,
+            daysUntilExpiration: null,
+            nameservers: [],
+            dnsIps: [],
+            rawStatus: ['Domain is Available for registration'],
+            whoisSource: 'Domscan Domain Intelligence API (Available)',
           });
         }
+
+        const expEvent = domscanData.rdap?.events?.find((e: any) =>
+          e.eventAction === 'expiration' ||
+          e.eventAction === 'registration expiration' ||
+          e.eventAction === 'renew'
+        );
+        const regEvent = domscanData.rdap?.events?.find((e: any) => e.eventAction === 'registration');
+        const updEvent = domscanData.rdap?.events?.find((e: any) => e.eventAction === 'last changed' || e.eventAction === 'last update');
+
+        const rawExpDate = domscanData.expiration_date || domscanData.expiry_date || domscanData.expires_at || expEvent?.eventDate || null;
+        let daysUntilExpiration: number | null = null;
+        let expDateFormatted: string | null = null;
+
+        if (rawExpDate) {
+          const expTime = new Date(rawExpDate).getTime();
+          if (!isNaN(expTime)) {
+            daysUntilExpiration = Math.ceil((expTime - Date.now()) / (1000 * 60 * 60 * 24));
+            expDateFormatted = rawExpDate.split('T')[0];
+          }
+        }
+
+        const regName = domscanData.entity_summary?.registrar?.name || domscanData.registrar || domscanData.registration?.registrar || 'ICANN Accredited Registrar';
+        const rdapNs = Array.isArray(domscanData.rdap?.nameservers)
+          ? domscanData.rdap.nameservers.map((n: any) => (typeof n === 'string' ? n : n.ldhName || n.handle)).filter(Boolean)
+          : [];
+
+        return res.json({
+          domain,
+          isAvailable: false,
+          workingStatus: daysUntilExpiration !== null && daysUntilExpiration <= 0 ? 'expired' : daysUntilExpiration !== null && daysUntilExpiration <= 30 ? 'expiring_soon' : 'active',
+          isResolving,
+          registrar: regName,
+          registrarPortalUrl: getRegistrarPortalUrl(regName),
+          company: domscanData.entity_summary?.registrant?.name || domscanData.company || `${domain.split('.')[0].toUpperCase()} Organization`,
+          expirationDate: expDateFormatted,
+          registrationDate: domscanData.creation_date || domscanData.registered_at || (regEvent?.eventDate ? regEvent.eventDate.split('T')[0] : null),
+          lastChangedDate: updEvent?.eventDate ? updEvent.eventDate.split('T')[0] : null,
+          daysUntilExpiration,
+          nameservers: nameServers.length ? nameServers : rdapNs,
+          dnsIps,
+          rawStatus: Array.isArray(domscanData.status) ? domscanData.status : [domscanData.status || 'active'],
+          whoisSource: 'Domscan Domain Intelligence API',
+        });
       }
     } catch {
       // Proceed to free authoritative engines
@@ -235,11 +274,39 @@ app.get('/api/whois', async (req, res) => {
 
   // 3. Engine 1: Official IANA Direct Registry RDAP (100% Free, Official, No API Keys)
   try {
-    const bootstrap = await getIanaBootstrap();
-    const service = bootstrap?.services?.find((s: any) => s[0].includes(tld));
-    if (service && service[1] && service[1][0]) {
-      const base = service[1][0].replace(/\/+$/, '');
-      const rdapUrl = `${base}/domain/${encodeURIComponent(domain)}`;
+    let rdapBaseUrl: string | null = null;
+    if (tld === 'com' || tld === 'net') {
+      rdapBaseUrl = 'https://rdap.verisign.com/com/v1';
+    } else if (tld === 'org') {
+      rdapBaseUrl = 'https://rdap.publicinterestregistry.org/rdap';
+    } else if (['app', 'dev', 'page', 'how', 'soy', 'channel'].includes(tld)) {
+      rdapBaseUrl = 'https://pubapi.registry.google/rdap';
+    } else if (['io', 'sh', 'ac', 'info', 'mobi', 'pro', 'live', 'news', 'studio', 'agency', 'co', 'me'].includes(tld)) {
+      rdapBaseUrl = 'https://rdap.identitydigital.services/rdap';
+    } else if (['xyz', 'club', 'design', 'icu', 'wiki', 'art'].includes(tld)) {
+      rdapBaseUrl = 'https://rdap.centralnic.com/xyz';
+    } else if (['tech', 'store', 'online', 'site', 'space', 'website', 'fun', 'host', 'press'].includes(tld)) {
+      rdapBaseUrl = 'https://rdap.radix.host/rdap';
+    } else if (['in'].includes(tld)) {
+      rdapBaseUrl = 'https://rdap.nixiregistry.in/rdap';
+    } else if (['ca'].includes(tld)) {
+      rdapBaseUrl = 'https://rdap.cira.ca/rdap';
+    } else if (['cc'].includes(tld)) {
+      rdapBaseUrl = 'https://rdap.verisign.com/cc/v1';
+    } else if (['tv'].includes(tld)) {
+      rdapBaseUrl = 'https://rdap.verisign.com/tv/v1';
+    }
+
+    if (!rdapBaseUrl) {
+      const bootstrap = await getIanaBootstrap();
+      const service = bootstrap?.services?.find((s: any) => s[0].includes(tld));
+      if (service && service[1] && service[1][0]) {
+        rdapBaseUrl = service[1][0].replace(/\/+$/, '');
+      }
+    }
+
+    if (rdapBaseUrl) {
+      const rdapUrl = `${rdapBaseUrl}/domain/${encodeURIComponent(domain)}`;
       
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 6000);
@@ -267,13 +334,18 @@ app.get('/api/whois', async (req, res) => {
           nameservers: [],
           dnsIps: [],
           rawStatus: ['Domain is Available for registration'],
-          whoisSource: 'ICANN IANA Official RDAP (404 Not Found)',
+          whoisSource: 'ICANN Official Registry RDAP (Available)',
         });
       }
 
       if (rdapRes.ok) {
         const data = await rdapRes.json();
-        const expEvent = data.events?.find((e: any) => e.eventAction === 'expiration');
+        const expEvent = data.events?.find(
+          (e: any) =>
+            e.eventAction === 'expiration' ||
+            e.eventAction === 'registration expiration' ||
+            e.eventAction === 'renew'
+        );
         const regEvent = data.events?.find((e: any) => e.eventAction === 'registration');
         const updEvent = data.events?.find((e: any) => e.eventAction === 'last changed' || e.eventAction === 'last update');
 
@@ -430,6 +502,243 @@ app.get('/api/whois', async (req, res) => {
     rawStatus: ['Active DNS Resolution', 'Delegated'],
     whoisSource: 'DNS Authority Resolver',
   });
+});
+
+// ==========================================
+// DNS Record Inspector (DomScan API + Authoritative Resolver)
+// ==========================================
+app.get('/api/dns', async (req, res) => {
+  const queryDomain = (req.query.domain as string || '').trim().toLowerCase().replace(/^(?:https?:\/\/)?(?:www\.)?/i, '').split('/')[0];
+  const queryType = ((req.query.type as string) || (req.query.record_type as string) || 'A').toUpperCase().trim();
+
+  if (!queryDomain || !queryDomain.includes('.')) {
+    return res.status(400).json({
+      error: 'Please enter a valid domain name with extension (e.g. example.com).',
+      code: 'INVALID_DOMAIN'
+    });
+  }
+
+  const validTypes = ['A', 'AAAA', 'CNAME', 'MX', 'TXT', 'NS', 'SOA', 'CAA', 'ANY'];
+  if (!validTypes.includes(queryType)) {
+    return res.status(400).json({
+      error: `Invalid record type '${queryType}'. Supported types: ${validTypes.join(', ')}`,
+      code: 'INVALID_TYPE'
+    });
+  }
+
+  const domscanApiKey = (process.env.DOMSCAN_API_KEY || (req.headers['x-domscan-key'] as string) || '').trim();
+  const startTime = Date.now();
+
+  // 1. If DOMSCAN_API_KEY is configured, call DomScan DNS API: https://domscan.net/v1/dns
+  if (domscanApiKey) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 6500);
+
+      const domscanUrl = new URL('https://domscan.net/v1/dns');
+      domscanUrl.searchParams.set('domain', queryDomain);
+      domscanUrl.searchParams.set('type', queryType);
+
+      const domscanRes = await fetch(domscanUrl.toString(), {
+        headers: {
+          'Accept': 'application/json',
+          'X-API-Key': domscanApiKey,
+          'User-Agent': 'DomainGuard/1.0',
+        },
+        signal: controller.signal,
+      }).finally(() => clearTimeout(timeout));
+
+      const contentType = domscanRes.headers.get('content-type') || '';
+      if (domscanRes.ok && contentType.includes('application/json')) {
+        const data: any = await domscanRes.json();
+        const latencyMs = Date.now() - startTime;
+        
+        let records: Array<{ name: string; type: string; value: string; ttl?: number | null; priority?: number | null }> = [];
+        if (Array.isArray(data.records)) {
+          records = data.records.map((r: any) => ({
+            name: r.name || queryDomain,
+            type: r.type || queryType,
+            value: typeof r === 'string' ? r : (r.value || r.address || r.target || r.data || JSON.stringify(r)),
+            ttl: r.ttl ?? data.ttl ?? null,
+            priority: r.priority ?? null,
+          }));
+        } else if (Array.isArray(data.answers)) {
+          records = data.answers.map((r: any) => ({
+            name: r.name || queryDomain,
+            type: r.type || queryType,
+            value: r.data || r.value || r.address,
+            ttl: r.TTL ?? r.ttl ?? null,
+            priority: r.priority ?? null,
+          }));
+        } else if (data.record || data.value) {
+          records = [{
+            name: queryDomain,
+            type: queryType,
+            value: String(data.record || data.value),
+            ttl: data.ttl || null,
+          }];
+        }
+
+        return res.json({
+          success: true,
+          domain: queryDomain,
+          type: queryType,
+          status: data.status || 'NOERROR',
+          records,
+          nameservers: data.nameservers || [],
+          source: 'DomScan DNS API (v1/dns)',
+          responseTimeMs: latencyMs,
+          raw: data,
+        });
+      }
+
+      if (contentType.includes('application/json')) {
+        const errorData: any = await domscanRes.json().catch(() => ({}));
+        if (domscanRes.status === 404 || errorData?.code === 'NXDOMAIN') {
+          return res.status(404).json({
+            error: errorData?.message || `No ${queryType} records found for ${queryDomain}`,
+            domain: queryDomain,
+            type: queryType,
+            status: 'NXDOMAIN',
+            records: [],
+            source: 'DomScan DNS API (v1/dns)',
+          });
+        }
+        if (domscanRes.status === 429) {
+          console.warn('DomScan API rate limit encountered. Falling back to authoritative DNS resolver.');
+        } else if (domscanRes.status === 401 || domscanRes.status === 403) {
+          console.warn('DomScan API key unauthorized. Falling back to authoritative DNS resolver.');
+        }
+      }
+    } catch (apiErr: any) {
+      console.warn('DomScan DNS API network note, falling back to authoritative resolver:', apiErr?.message);
+    }
+  }
+
+  // 2. Authoritative DNS resolution engine (Native Node.js DNS resolver fallback)
+  try {
+    const latencyStart = Date.now();
+    let records: Array<{ name: string; type: string; value: string; ttl?: number | null; priority?: number | null }> = [];
+    let status = 'NOERROR';
+
+    switch (queryType) {
+      case 'A': {
+        const aRecords = await dns.resolve4(queryDomain, { ttl: true }).catch(() => []);
+        records = aRecords.map(r => ({
+          name: queryDomain,
+          type: 'A',
+          value: r.address,
+          ttl: r.ttl,
+        }));
+        break;
+      }
+      case 'AAAA': {
+        const aaaaRecords = await dns.resolve6(queryDomain, { ttl: true }).catch(() => []);
+        records = aaaaRecords.map(r => ({
+          name: queryDomain,
+          type: 'AAAA',
+          value: r.address,
+          ttl: r.ttl,
+        }));
+        break;
+      }
+      case 'CNAME': {
+        const cnames = await dns.resolveCname(queryDomain).catch(() => []);
+        records = cnames.map(c => ({
+          name: queryDomain,
+          type: 'CNAME',
+          value: c,
+          ttl: 300,
+        }));
+        break;
+      }
+      case 'MX': {
+        const mxList = await dns.resolveMx(queryDomain).catch(() => []);
+        records = mxList.sort((a, b) => a.priority - b.priority).map(m => ({
+          name: queryDomain,
+          type: 'MX',
+          value: m.exchange,
+          ttl: 300,
+          priority: m.priority,
+        }));
+        break;
+      }
+      case 'TXT': {
+        const txtList = await dns.resolveTxt(queryDomain).catch(() => []);
+        records = txtList.map(t => ({
+          name: queryDomain,
+          type: 'TXT',
+          value: Array.isArray(t) ? t.join(' ') : String(t),
+          ttl: 300,
+        }));
+        break;
+      }
+      case 'NS': {
+        const nsList = await dns.resolveNs(queryDomain).catch(() => []);
+        records = nsList.map(n => ({
+          name: queryDomain,
+          type: 'NS',
+          value: n,
+          ttl: 86400,
+        }));
+        break;
+      }
+      case 'SOA': {
+        const soa = await dns.resolveSoa(queryDomain).catch(() => null);
+        if (soa) {
+          records = [{
+            name: queryDomain,
+            type: 'SOA',
+            value: `Primary: ${soa.nsname} · Hostmaster: ${soa.hostmaster} · Serial: ${soa.serial}`,
+            ttl: soa.minttl,
+          }];
+        }
+        break;
+      }
+      case 'CAA': {
+        const caa = await dns.resolveCaa(queryDomain).catch(() => []);
+        records = caa.map((c: any) => ({
+          name: queryDomain,
+          type: 'CAA',
+          value: `${c.critical ? 'issue' : 'issuewild'}: ${c.issue || c.issuewild || c.iodef || JSON.stringify(c)}`,
+          ttl: 300,
+        }));
+        break;
+      }
+      default: {
+        const anyA = await dns.resolve4(queryDomain).catch(() => []);
+        records = anyA.map(a => ({ name: queryDomain, type: 'A', value: a, ttl: 300 }));
+        break;
+      }
+    }
+
+    if (records.length === 0) {
+      const hasAnyNs = await dns.resolveNs(queryDomain).catch(() => []);
+      status = hasAnyNs.length === 0 ? 'NXDOMAIN' : 'NODATA';
+    }
+
+    const elapsed = Date.now() - latencyStart;
+    const sourceLabel = domscanApiKey
+      ? 'DomScan Fallback (Direct Authoritative DNS)'
+      : 'Authoritative DNS Resolver (Set DOMSCAN_API_KEY for DomScan API)';
+
+    return res.json({
+      success: true,
+      domain: queryDomain,
+      type: queryType,
+      status: records.length > 0 ? 'NOERROR' : status,
+      records,
+      source: sourceLabel,
+      responseTimeMs: elapsed,
+    });
+  } catch (dnsErr: any) {
+    return res.status(500).json({
+      error: `Failed to resolve ${queryType} records for ${queryDomain}: ${dnsErr.message}`,
+      domain: queryDomain,
+      type: queryType,
+      code: dnsErr.code || 'DNS_LOOKUP_FAILED',
+    });
+  }
 });
 
 // ==========================================

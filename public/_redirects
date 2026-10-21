@@ -1,3 +1,4 @@
-# Cloudflare Pages SPA Routing
-# Direct all paths to /index.html with status 200 to prevent 404 on page refresh or deep link
-/*    /index.html   200
+# Cloudflare Pages Routing
+# Allow API Functions to execute without SPA rewrite interception
+/api/*   /api/:splat   200
+/*       /index.html   200

@@ -6,6 +6,7 @@ import { PublicWhoisLookupPage } from './components/PublicWhoisLookupPage';
 import { TopNavigation, NavTab } from './components/TopNavigation';
 import { DashboardView } from './components/DashboardView';
 import { WhoisLookupView } from './components/WhoisLookupView';
+import { DnsCheckerView } from './components/DnsCheckerView';
 import { AlertsSettingsView } from './components/AlertsSettingsView';
 import { EnterpriseTeamView } from './components/EnterpriseTeamView';
 import { AddDomainModal } from './components/AddDomainModal';
@@ -517,6 +518,14 @@ function MainApplication() {
             />
           )}
 
+          {currentTab === 'dns' && (
+            <DnsCheckerView
+              onAddDomain={handleAddDomain}
+              trackedDomains={domains}
+              onNavigateToWhois={() => setCurrentTab('whois')}
+            />
+          )}
+
           {currentTab === 'alerts' && (
             <AlertsSettingsView
               settings={settings}
@@ -557,6 +566,10 @@ function MainApplication() {
         domain={selectedDomainForDetails}
         onClose={() => setSelectedDomainForDetails(null)}
         onToggleAlert2Days={handleToggleAlert2Days}
+        onCheckDns={(_dom) => {
+          setSelectedDomainForDetails(null);
+          setCurrentTab('dns');
+        }}
       />
 
       <SupabaseSchemaModal

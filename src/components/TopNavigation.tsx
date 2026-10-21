@@ -17,6 +17,7 @@ import {
   Menu,
   X,
   Plus,
+  Radio,
 } from 'lucide-react';
 
 export type NavTab =
@@ -24,6 +25,7 @@ export type NavTab =
   | 'domains'
   | 'calendar'
   | 'whois'
+  | 'dns'
   | 'alerts'
   | 'team'
   | 'supabase'
@@ -164,6 +166,26 @@ export const TopNavigation: React.FC<TopNavigationProps> = ({
                 }`}
               />
               <span className="truncate">RDAP Finder</span>
+            </button>
+
+            {/* DNS Checker */}
+            <button
+              type="button"
+              onClick={() => handleTabClick('dns')}
+              className={`w-full px-3 py-2 rounded-lg text-[13.5px] flex items-center gap-3 transition-colors text-left cursor-pointer ${
+                currentTab === 'dns'
+                  ? 'bg-[#e8f3fc] dark:bg-sky-950/50 text-[#0284c7] dark:text-sky-400 font-semibold shadow-2xs'
+                  : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60 font-medium'
+              }`}
+            >
+              <Radio
+                className={`w-4 h-4 shrink-0 ${
+                  currentTab === 'dns'
+                    ? 'text-[#0284c7] dark:text-sky-400'
+                    : 'text-slate-500 dark:text-slate-400'
+                }`}
+              />
+              <span className="truncate">DNS Checker</span>
             </button>
           </div>
         </div>

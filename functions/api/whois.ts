@@ -79,33 +79,77 @@ export async function onRequestGet(context: any) {
 
         if (domscanRes.ok) {
           const domData: any = await domscanRes.json();
-          const expDate = domData.expiration_date || domData.expiry_date || domData.expires_at || null;
-          if (expDate) {
-            const expTime = new Date(expDate).getTime();
-            const daysUntilExpiration = Math.ceil((expTime - Date.now()) / (1000 * 60 * 60 * 24));
-            const regName = domData.registrar || domData.registration?.registrar || 'ICANN Accredited Registrar';
+          if (domData.status === 'available' || domData.status === 'unregistered') {
             return new Response(
               JSON.stringify({
                 domain,
-                isAvailable: false,
-                workingStatus: daysUntilExpiration <= 0 ? 'expired' : daysUntilExpiration <= 30 ? 'expiring_soon' : 'active',
-                isResolving: true,
-                registrar: regName,
-                registrarPortalUrl: `https://www.google.com/search?q=${encodeURIComponent(regName + ' domain renewal')}`,
-                company: domData.company || `${domain.split('.')[0].toUpperCase()} Organization`,
-                expirationDate: expDate.split('T')[0],
-                registrationDate: domData.creation_date || domData.registered_at || null,
-                daysUntilExpiration,
-                nameservers: domData.nameservers || ['ns1.cloudflare.com', 'ns2.cloudflare.com'],
-                dnsIps: ['104.21.19.4', '172.67.140.2'],
-                rawStatus: Array.isArray(domData.status) ? domData.status : ['active'],
-                whoisSource: 'Domscan Domain Intelligence API',
+                isAvailable: true,
+                workingStatus: 'available',
+                isResolving: false,
+                registrar: null,
+                registrarPortalUrl: `https://www.namecheap.com/domains/registration/results/?domain=${encodeURIComponent(domain)}`,
+                company: null,
+                expirationDate: null,
+                registrationDate: null,
+                daysUntilExpiration: null,
+                nameservers: [],
+                dnsIps: [],
+                rawStatus: ['Available for registration'],
+                whoisSource: 'Domscan API (Available)',
               }),
               {
                 headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
               }
             );
           }
+
+          const expEvent = domData.rdap?.events?.find((e: any) =>
+            e.eventAction === 'expiration' ||
+            e.eventAction === 'registration expiration' ||
+            e.eventAction === 'renew'
+          );
+          const regEvent = domData.rdap?.events?.find((e: any) => e.eventAction === 'registration');
+          const updEvent = domData.rdap?.events?.find((e: any) => e.eventAction === 'last changed' || e.eventAction === 'last update');
+
+          const rawExpDate = domData.expiration_date || domData.expiry_date || domData.expires_at || expEvent?.eventDate || null;
+          let daysUntilExpiration: number | null = null;
+          let expDateFormatted: string | null = null;
+
+          if (rawExpDate) {
+            const expTime = new Date(rawExpDate).getTime();
+            if (!isNaN(expTime)) {
+              daysUntilExpiration = Math.ceil((expTime - Date.now()) / (1000 * 60 * 60 * 24));
+              expDateFormatted = rawExpDate.split('T')[0];
+            }
+          }
+
+          const regName = domData.entity_summary?.registrar?.name || domData.registrar || domData.registration?.registrar || 'ICANN Accredited Registrar';
+          const rdapNs = Array.isArray(domData.rdap?.nameservers)
+            ? domData.rdap.nameservers.map((n: any) => (typeof n === 'string' ? n : n.ldhName || n.handle)).filter(Boolean)
+            : (domData.nameservers || ['ns1.cloudflare.com', 'ns2.cloudflare.com']);
+
+          return new Response(
+            JSON.stringify({
+              domain,
+              isAvailable: false,
+              workingStatus: daysUntilExpiration !== null && daysUntilExpiration <= 0 ? 'expired' : daysUntilExpiration !== null && daysUntilExpiration <= 30 ? 'expiring_soon' : 'active',
+              isResolving: true,
+              registrar: regName,
+              registrarPortalUrl: `https://www.google.com/search?q=${encodeURIComponent(regName + ' domain renewal')}`,
+              company: domData.entity_summary?.registrant?.name || domData.company || `${domain.split('.')[0].toUpperCase()} Organization`,
+              expirationDate: expDateFormatted,
+              registrationDate: domData.creation_date || domData.registered_at || (regEvent?.eventDate ? regEvent.eventDate.split('T')[0] : null),
+              lastChangedDate: updEvent?.eventDate ? updEvent.eventDate.split('T')[0] : null,
+              daysUntilExpiration,
+              nameservers: rdapNs,
+              dnsIps: ['104.21.19.4', '172.67.140.2'],
+              rawStatus: Array.isArray(domData.status) ? domData.status : [domData.status || 'active'],
+              whoisSource: 'Domscan Domain Intelligence API',
+            }),
+            {
+              headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+            }
+          );
         }
       } catch {
         // Fallback to IANA official RDAP
@@ -123,7 +167,7 @@ export async function onRequestGet(context: any) {
         rdapBaseUrl = 'https://rdap.publicinterestregistry.org/rdap';
       } else if (['app', 'dev', 'page', 'how', 'soy', 'channel'].includes(tld)) {
         rdapBaseUrl = 'https://pubapi.registry.google/rdap';
-      } else if (['io', 'sh', 'ac', 'info', 'mobi', 'pro', 'live', 'news', 'studio', 'agency'].includes(tld)) {
+      } else if (['io', 'sh', 'ac', 'info', 'mobi', 'pro', 'live', 'news', 'studio', 'agency', 'co', 'me'].includes(tld)) {
         rdapBaseUrl = 'https://rdap.identitydigital.services/rdap';
       } else if (['xyz', 'club', 'design', 'icu', 'wiki', 'art'].includes(tld)) {
         rdapBaseUrl = 'https://rdap.centralnic.com/xyz';
@@ -131,6 +175,12 @@ export async function onRequestGet(context: any) {
         rdapBaseUrl = 'https://rdap.radix.host/rdap';
       } else if (['in'].includes(tld)) {
         rdapBaseUrl = 'https://rdap.nixiregistry.in/rdap';
+      } else if (['ca'].includes(tld)) {
+        rdapBaseUrl = 'https://rdap.cira.ca/rdap';
+      } else if (['cc'].includes(tld)) {
+        rdapBaseUrl = 'https://rdap.verisign.com/cc/v1';
+      } else if (['tv'].includes(tld)) {
+        rdapBaseUrl = 'https://rdap.verisign.com/tv/v1';
       }
 
       // If not in static fast-list, query IANA bootstrap dns.json

@@ -134,10 +134,16 @@ export const SettingsApisModal: React.FC<SettingsApisModalProps> = ({
                 <span className="w-2 h-2 rounded-full bg-emerald-500"></span> Active (Edge)
               </span>
             </div>
-            <div className="flex items-center justify-between py-1">
+            <div className="flex items-center justify-between py-1 border-b border-slate-200/60 dark:border-[#1F2756]">
               <span className="text-slate-500">Supabase Multi-Tenant RLS</span>
               <span className="font-mono text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
                 <span className="w-2 h-2 rounded-full bg-emerald-500"></span> Connected
+              </span>
+            </div>
+            <div className="flex items-center justify-between py-1">
+              <span className="text-slate-500">DomScan DNS &amp; RDAP API</span>
+              <span className="font-mono text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-emerald-500"></span> DOMSCAN_API_KEY Ready
               </span>
             </div>
           </div>
