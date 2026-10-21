@@ -153,19 +153,19 @@ function MainApplication() {
 
   // Sync domains to local storage and cloud server whenever modified
   const updateDomains = useCallback((newDomains: DomainItem[]) => {
-    setDomains(newDomains);
-    saveDomains(newDomains, user?.id);
-    if (user?.id) {
-      setCloudSyncStatus('syncing');
-      syncAccountDomains(newDomains, user.id, token, user.email)
-        .then((ok) => {
-          setCloudSyncStatus(ok ? 'synced' : 'offline');
-        })
-        .catch(() => {
-          setCloudSyncStatus('offline');
-        });
-    }
-  }, [user?.id, user?.email, token]);
+  setDomains(newDomains);
+  saveDomains(newDomains, user?.id);
+  if (user?.id) {
+    setCloudSyncStatus('syncing');
+    syncAccountDomains(newDomains, user.id, token, user.email)
+      .then((ok) => {
+        setCloudSyncStatus(ok ? 'synced' : 'offline');
+      })
+      .catch(() => {
+        setCloudSyncStatus('offline');
+      });
+  }
+}, [user?.id, user?.email, token]);
 
   // Periodic automatic updates ticker & continuous alert scheduler
   useEffect(() => {
