@@ -85,17 +85,14 @@ export const PublicWhoisLookupPage: React.FC<PublicWhoisLookupPageProps> = ({
       {/* Top Header */}
       <header className="w-full max-w-6xl mx-auto px-4 sm:px-6 py-4 sm:py-5 flex items-center justify-between border-b border-[#E2E4EE] dark:border-[#1F2756]">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-[10px] bg-[#101432] text-[#D6F24B] border border-[#1B2050] flex items-center justify-center font-bold text-xs tracking-tight shadow-sm">
-            <Shield className="w-5 h-5 stroke-[2.5]" />
-          </div>
-          <div>
-            <span className="font-display text-[18px] font-extrabold tracking-tight text-[#101432] dark:text-white">
-              DomainGuard
-            </span>
-            <span className="text-[#5B6178] text-xs font-mono ml-2.5 hidden sm:inline">
-              Public RDAP &amp; WHOIS Finder
-            </span>
-          </div>
+          <img
+            src={isDark ? "/assets/aistudio/domain_guard_logo_dark.png" : "/assets/aistudio/domain_guard_logo.png"}
+            alt="DomainGuard"
+            className="h-7 w-auto max-w-[180px] object-contain"
+          />
+          <span className="text-[#5B6178] text-xs font-mono ml-2 hidden sm:inline border-l border-slate-300 dark:border-slate-700 pl-3">
+            Public RDAP &amp; WHOIS Finder
+          </span>
         </div>
 
         <div className="flex items-center gap-2 sm:gap-3">

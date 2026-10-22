@@ -92,17 +92,14 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       {/* Top Header */}
       <header className="w-full max-w-6xl mx-auto px-6 py-6 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-[10px] bg-[#101432] text-[#D6F24B] border border-[#1B2050] flex items-center justify-center font-bold text-sm tracking-tight shadow-sm">
-            <Shield className="w-5 h-5 stroke-[2.5]" />
-          </div>
-          <div>
-            <span className="font-display text-[19px] font-extrabold tracking-tight text-[#101432] dark:text-white">
-              DomainGuard
-            </span>
-            <span className="text-[#5B6178] text-xs font-mono ml-2.5 hidden sm:inline">
-              Portfolio Ledger
-            </span>
-          </div>
+          <img
+            src={isDark ? "/assets/aistudio/domain_guard_logo_dark.png" : "/assets/aistudio/domain_guard_logo.png"}
+            alt="DomainGuard"
+            className="h-8 w-auto max-w-[190px] object-contain"
+          />
+          <span className="text-[#5B6178] text-xs font-mono ml-2 hidden sm:inline border-l border-slate-300 dark:border-slate-700 pl-3">
+            Portfolio Ledger
+          </span>
         </div>
 
         <div className="flex items-center gap-2.5 sm:gap-3">

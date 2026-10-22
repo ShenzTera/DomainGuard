@@ -61,20 +61,18 @@ export const TopNavigation: React.FC<TopNavigationProps> = ({
 
   const navContent = (
     <div className="flex flex-col h-full bg-white dark:bg-[#101432] text-slate-800 dark:text-slate-200">
-      {/* 1. Header Zone: Clean brand header */}
-      <div className="p-4 pb-3 border-b border-slate-100 dark:border-[#1F2756] flex items-center gap-2.5 shrink-0">
-        <div className="w-8 h-8 rounded-lg bg-[#0284c7] text-white flex items-center justify-center shrink-0 shadow-xs">
-          <ShieldCheck className="w-5 h-5 stroke-[2.2]" />
+      {/* 1. Header Zone: Clean brand header with official DomainGuard logo */}
+      <div className="p-4 pb-3.5 border-b border-slate-100 dark:border-[#1F2756] flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-2 min-w-0">
+          <img
+            src={isDark ? "/assets/aistudio/domain_guard_logo_dark.png" : "/assets/aistudio/domain_guard_logo.png"}
+            alt="DomainGuard"
+            className="h-7 w-auto max-w-[165px] object-contain"
+          />
         </div>
-
-        <div className="min-w-0">
-          <h1 className="font-bold text-[15px] leading-tight text-slate-900 dark:text-white font-sans tracking-tight truncate">
-            DomainGuard
-          </h1>
-          <p className="text-[10px] text-slate-500 font-mono tracking-tight mt-0.5 truncate">
-            v1.0.4 • Cloudflare + Supabase
-          </p>
-        </div>
+        <span className="text-[9.5px] text-slate-400 dark:text-slate-500 font-mono px-1.5 py-0.5 rounded bg-slate-100 dark:bg-[#161C40] shrink-0">
+          v1.0.4
+        </span>
       </div>
 
       {/* 2. Navigation Items: 3 Sections */}
@@ -337,18 +335,12 @@ export const TopNavigation: React.FC<TopNavigationProps> = ({
     <>
       {/* Mobile Top Bar (Screen < 1024px) */}
       <header className="lg:hidden sticky top-0 z-40 bg-white dark:bg-[#101432] border-b border-slate-200 dark:border-[#1F2756] text-slate-900 dark:text-white px-4 py-2.5 flex items-center justify-between shadow-xs">
-        <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-lg bg-[#0284c7] text-white flex items-center justify-center font-bold shadow-xs">
-            <ShieldCheck className="w-4 h-4 stroke-[2.2]" />
-          </div>
-          <div>
-            <span className="font-sans text-[15px] font-bold text-slate-900 dark:text-white leading-tight">
-              DomainGuard
-            </span>
-            <span className="block text-[10px] text-slate-500 font-mono">
-              v1.0.4 • Cloudflare + Supabase
-            </span>
-          </div>
+        <div className="flex items-center gap-2">
+          <img
+            src={isDark ? "/assets/aistudio/domain_guard_logo_dark.png" : "/assets/aistudio/domain_guard_logo.png"}
+            alt="DomainGuard"
+            className="h-6 w-auto max-w-[145px] object-contain"
+          />
         </div>
 
         <div className="flex items-center gap-2">

@@ -153,19 +153,19 @@ function MainApplication() {
 
   // Sync domains to local storage and cloud server whenever modified
   const updateDomains = useCallback((newDomains: DomainItem[]) => {
-  setDomains(newDomains);
-  saveDomains(newDomains, user?.id);
-  if (user?.id) {
-    setCloudSyncStatus('syncing');
-    syncAccountDomains(newDomains, user.id, token, user.email)
-      .then((ok) => {
-        setCloudSyncStatus(ok ? 'synced' : 'offline');
-      })
-      .catch(() => {
-        setCloudSyncStatus('offline');
-      });
-  }
-}, [user?.id, user?.email, token]);
+    setDomains(newDomains);
+    saveDomains(newDomains, user?.id);
+    if (user?.id) {
+      setCloudSyncStatus('syncing');
+      syncAccountDomains(newDomains, user.id, token, user.email)
+        .then((ok) => {
+          setCloudSyncStatus(ok ? 'synced' : 'offline');
+        })
+        .catch(() => {
+          setCloudSyncStatus('offline');
+        });
+    }
+  }, [user?.id, user?.email, token]);
 
   // Periodic automatic updates ticker & continuous alert scheduler
   useEffect(() => {
@@ -425,9 +425,14 @@ function MainApplication() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-neutral-50 dark:bg-neutral-950 text-neutral-900 dark:text-white">
-        <div className="flex items-center gap-2 font-mono text-xs">
-          <span className="w-2 h-2 rounded-full bg-neutral-900 dark:bg-white animate-ping"></span>
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#F3F4F8] dark:bg-[#0B0E23] text-neutral-900 dark:text-white gap-4">
+        <img
+          src={isDark ? "/assets/aistudio/domain_guard_shield_dark.png" : "/assets/aistudio/domain_guard_shield.png"}
+          alt="DomainGuard"
+          className="w-12 h-12 object-contain animate-pulse"
+        />
+        <div className="flex items-center gap-2 font-mono text-xs text-[#5B6178]">
+          <span className="w-1.5 h-1.5 rounded-full bg-[#2A3AF0] animate-ping"></span>
           <span>Initializing DomainGuard Session...</span>
         </div>
       </div>
