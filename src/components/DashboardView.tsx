@@ -453,12 +453,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   </div>
                 </th>
 
-                <th className="px-4 py-3.5 cursor-pointer select-none min-w-[160px]" onClick={() => handleSortToggle('company')}>
-                  <div className="flex items-center gap-1.5 text-white/90">
-                    <span>PORTFOLIO &amp; OWNER</span>
-                    <ArrowUpDown className="w-3 h-3 text-white/50" />
-                  </div>
-                </th>
+
 
                 <th className="px-4 py-3.5 cursor-pointer select-none min-w-[160px]" onClick={() => handleSortToggle('statusCode')}>
                   <div className="flex items-center gap-1.5 text-white/90">
@@ -494,7 +489,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <tbody className="divide-y divide-[#E2E4EE] dark:divide-[#1F2756]">
               {filteredAndSortedDomains.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-16 text-center text-[#5B6178]">
+                  <td colSpan={6} className="px-6 py-16 text-center text-[#5B6178]">
                     <div className="flex flex-col items-center justify-center gap-3 max-w-md mx-auto">
                       <div className="w-10 h-10 rounded-[10px] bg-[#F3F4F8] dark:bg-[#1B2050] text-[#101432] dark:text-white flex items-center justify-center">
                         <Search className="w-5 h-5 text-[#5B6178]" />
@@ -606,17 +601,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         </div>
                       </td>
 
-                      {/* Column 2: Portfolio & Assigned Owner */}
-                      <td className="px-4 py-4 align-middle min-w-[160px]">
-                        <span className="inline-block px-2.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-sans text-[11px] font-semibold border border-slate-200/60 dark:border-slate-700/60">
-                          {domain.portfolio || 'Core Infrastructure'}
-                        </span>
-                        {domain.assignedEmployees?.[0] && (
-                          <div className="font-mono text-[11px] text-slate-400 dark:text-slate-500 truncate max-w-[150px] mt-1">
-                            {domain.assignedEmployees[0]}
-                          </div>
-                        )}
-                      </td>
+
 
                       {/* Column 3: HTTP & Latency (Monospaced data) */}
                       <td className="px-4 py-4 align-middle font-mono min-w-[160px]">

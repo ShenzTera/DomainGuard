@@ -7,7 +7,6 @@ import {
   Calendar,
   Search,
   Bell,
-  Layers,
   Database,
   Cpu,
   Settings,
@@ -215,25 +214,7 @@ export const TopNavigation: React.FC<TopNavigationProps> = ({
               <span className="ml-auto w-2 h-2 rounded-full bg-red-500 ring-2 ring-red-100 dark:ring-red-950/80"></span>
             </button>
 
-            {/* Portfolios */}
-            <button
-              type="button"
-              onClick={() => handleTabClick('team')}
-              className={`w-full px-3 py-2 rounded-lg text-[13.5px] flex items-center gap-3 transition-colors text-left cursor-pointer ${
-                currentTab === 'team'
-                  ? 'bg-[#e8f3fc] dark:bg-sky-950/50 text-[#0284c7] dark:text-sky-400 font-semibold shadow-2xs'
-                  : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60 font-medium'
-              }`}
-            >
-              <Layers
-                className={`w-4 h-4 shrink-0 ${
-                  currentTab === 'team'
-                    ? 'text-[#0284c7] dark:text-sky-400'
-                    : 'text-slate-500 dark:text-slate-400'
-                }`}
-              />
-              <span className="truncate">Portfolios</span>
-            </button>
+
           </div>
         </div>
 
